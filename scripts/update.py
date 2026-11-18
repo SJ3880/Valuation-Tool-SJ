@@ -167,8 +167,11 @@ def update_prices(companies):
                 continue
             series.setdefault(code, {})[ds] = [c, num(r.get("ACC_TRDVOL")), num(r.get("ACC_TRDVAL")),
                                               num(r.get("LIST_SHRS")), num(r.get("MKTCAP"))]
-            if code in companies and not companies[code].get("isuName"):
+            if code in companies and not companies[code].get("_sectSet"):
                 companies[code]["isuName"] = r.get("ISU_NM")
+                companies[code]["sect"] = (r.get("SECT_TP_NM") or "").strip() or None   # 코스닥 소속부(관리종목 등)
+                companies[code]["sectAt"] = ds
+                companies[code]["_sectSet"] = True
     log(f"[주가] 거래일 {got}일 받음, 종목 {len(series)}개")
     # 종목별 파일에 합치기
     for code, add in series.items():
@@ -351,20 +354,22 @@ def fetch_fin(dart, corp, year, rc):
     return None
 
 
-def update_fin(companies, cmap):
-    if not DART_KEY:
+def update_fin(companies, cmap, dart):
+    if not dart:
         log("[재무] DART_API_KEY 가 없어 건너뜀")
         return
     FIN.mkdir(parents=True, exist_ok=True)
-    dart = DartBudget(DART_BUDGET)
     want = wanted_reports()
     log(f"[재무] 받을 보고서: {[(y, REPORTS[r]) for y, r in want]}")
     codes = sorted(companies, key=lambda c: (companies[c]["market"] != "코스닥", c))   # 코스닥 먼저(IPO 비교회사 대부분)
     done_corp = 0
     try:
         for code in codes:
-            if mins() > TIME_LIMIT_MIN:
+            if mins() > TIME_LIMIT_MIN * 0.75:
                 log("[재무] 시간 제한 → 나머지는 다음 실행에")
+                break
+            if dart.left < 2500:            # 메타(감사의견 등)·매출비중 몫 남겨둠
+                log("[재무] 이번 실행 몫 다 씀 → 나머지는 다음 실행에")
                 break
             corp = cmap.get(code)
             if not corp:
@@ -397,11 +402,182 @@ def update_fin(companies, cmap):
     log(f"[재무] 회사 {done_corp}개 갱신 · DART 호출 {dart.calls}회")
 
 
+
+# ---------------------------------------------------------------- 4) 회사 메타(표준산업분류·감사의견)
+META_P = DATA / "meta.json"
+
+
+def load_meta():
+    try:
+        return json.loads(META_P.read_text("utf-8"))
+    except Exception:
+        return {}
+
+
+def update_meta(companies, cmap, dart, meta):
+    """DART 기업개황(표준산업분류 코드)·최근 사업연도 감사의견. 한 번 받으면 1년에 한 번만 다시"""
+    fy = TODAY.year - 1 if TODAY.month >= 4 else TODAY.year - 2
+    n = 0
+    try:
+        for code in sorted(companies, key=lambda c: (companies[c]["market"] != "코스닥", c)):
+            if mins() > TIME_LIMIT_MIN:
+                break
+            corp = cmap.get(code)
+            if not corp:
+                continue
+            m = meta.setdefault(code, {})
+            if not m.get("ksic"):
+                j = dart.get("company.json", corp_code=corp)
+                if j.get("status") == "000":
+                    m["ksic"] = j.get("induty_code") or None
+                    m["est"] = j.get("est_dt") or None
+                    n += 1
+            if (m.get("audit") or {}).get("year") != fy:
+                j = dart.get("accnutAdtorNmNdAdtOpinion.json", corp_code=corp, bsns_year=str(fy), reprt_code="11011")
+                if j.get("status") == "000" and j.get("list"):
+                    row = next((r for r in j["list"] if "당기" in (r.get("bsns_year") or "")), j["list"][0])
+                    m["audit"] = {"year": fy, "opinion": (row.get("adt_opinion") or "").strip() or None,
+                                  "auditor": (row.get("adtor") or "").strip() or None}
+                    n += 1
+                elif j.get("status") == "013":
+                    m["audit"] = {"year": fy, "opinion": None}
+    except StopIteration as e:
+        log(f"[메타] {e}")
+    log(f"[메타] 표준산업분류·감사의견 {n}건 갱신")
+
+
+# ---------------------------------------------------------------- 5) 주요 제품 매출 비중(사업보고서 본문)
+def strip_tags(x):
+    import html as _h
+    return re.sub(r"\s+", " ", _h.unescape(re.sub(r"<[^>]+>", " ", x))).strip()
+
+
+def parse_mix(xml):
+    """사업보고서 '주요 제품(및 서비스)' 표에서 품목·매출비중 뽑기"""
+    i = xml.find("주요 제품")
+    if i < 0:
+        i = xml.find("주요제품")
+    if i < 0:
+        return None
+    seg = xml[i: i + 200000]
+    j = seg.find("원재료")
+    if j > 0:
+        seg = seg[:j]
+    for tbl in re.findall(r"<TABLE.*?</TABLE>", seg, flags=re.S | re.I)[:6]:
+        rows = [[strip_tags(c) for c in re.findall(r"<T[DHE][^>]*>(.*?)</T[DHE]>", tr, flags=re.S | re.I)]
+                for tr in re.findall(r"<TR.*?</TR>", tbl, flags=re.S | re.I)]
+        rows = [r for r in rows if any(r)]
+        if len(rows) < 2:
+            continue
+        hdr_i = next((k for k, r in enumerate(rows[:3]) if any(re.search(r"비율|비중|%", c) for c in r)), None)
+        if hdr_i is None:
+            continue
+        hdr = [c.replace(" ", "") for c in rows[hdr_i]]
+        pc = next((k for k, c in enumerate(hdr) if re.search(r"비율|비중", c)), None)
+        if pc is None:
+            pc = next((k for k, c in enumerate(hdr) if "%" in c), None)
+        nc = next((k for k, c in enumerate(hdr) if re.search(r"품목|제품|품명|상품", c)), None)
+        if nc is None:
+            nc = next((k for k, c in enumerate(hdr) if re.search(r"부문|구분", c)), 0)
+        out = []
+        for r in rows[hdr_i + 1:]:
+            if len(r) != len(hdr):          # 병합된 행은 열이 밀리므로 끝에서부터 맞춤
+                off = len(hdr) - len(r)
+                pi, ni = pc - off, nc - off
+            else:
+                pi, ni = pc, nc
+            if not (0 <= pi < len(r)):
+                continue
+            name = r[ni] if 0 <= ni < len(r) else (r[0] if r else "")
+            if not name or re.fullmatch(r"(합\s*계|총\s*계|계|소\s*계|합계\(.*\))", name.replace(" ", "")) or re.search(r"합계|총계", name):
+                continue
+            v = re.sub(r"[^0-9.\-]", "", r[pi])
+            try:
+                pct = float(v)
+            except ValueError:
+                continue
+            if 0 < pct <= 100:
+                out.append({"n": name[:40], "p": round(pct, 2)})
+        if out:
+            out.sort(key=lambda x: -x["p"])
+            return out[:6]
+    return None
+
+
+def update_mix(companies, dart, meta):
+    """최근 사업보고서 본문을 한 번만 읽어 주요 제품 매출 비중 저장(1년에 한 번)"""
+    n = tried = 0
+    try:
+        for code in sorted(companies, key=lambda c: (companies[c]["market"] != "코스닥", c)):
+            if mins() > TIME_LIMIT_MIN or dart.left < 50:
+                break
+            fp = FIN / f"{code}.json"
+            if not fp.exists():
+                continue
+            fin = json.loads(fp.read_text("utf-8"))
+            fys = sorted((k for k, v in fin.get("r", {}).items() if k.endswith("FY") and v and v.get("rcept")), reverse=True)
+            if not fys:
+                continue
+            rc = fin["r"][fys[0]]["rcept"]
+            m = meta.setdefault(code, {})
+            if (m.get("mix") or {}).get("rcept") == rc:
+                continue
+            tried += 1
+            try:
+                r = requests.get(f"{DART_API}/document.xml", params={"crtfc_key": DART_KEY, "rcept_no": rc}, timeout=120)
+                dart.left -= 1
+                dart.calls += 1
+                z = zipfile.ZipFile(io.BytesIO(r.content))
+                main = max(z.namelist(), key=lambda nm: z.getinfo(nm).file_size)
+                raw = z.read(main)
+                xml = raw.decode("utf-8", errors="ignore")
+                if "주요" not in xml:
+                    xml = raw.decode("euc-kr", errors="ignore")
+                mix = parse_mix(xml)
+            except zipfile.BadZipFile:
+                mix = None
+            except Exception as e:
+                log(f"  - {code} 매출비중 실패: {e}")
+                continue
+            m["mix"] = {"rcept": rc, "year": fys[0][:4], "items": mix}
+            if mix:
+                n += 1
+            time.sleep(0.1)
+    except StopIteration as e:
+        log(f"[매출비중] {e}")
+    log(f"[매출비중] 사업보고서 {tried}건 확인 · 표 읽음 {n}건")
+
+
+# ---------------------------------------------------------------- 6) 공모 할인율(IPO 동향 사이트 데이터)
+def ipo_discounts():
+    """IPO 동향 분석 사이트(SJ3880/IPO-Investing)의 상장완료 데이터에서 신고서 할인율·트랙"""
+    url = "https://raw.githubusercontent.com/SJ3880/IPO-Investing/main/data/ipos.json"
+    try:
+        items = requests.get(url, timeout=60).json()["items"]
+    except Exception as e:
+        log(f"[할인율] IPO 사이트 데이터 실패: {e}")
+        return
+    out = []
+    for x in items:
+        b = x.get("discBand")
+        if not b or x.get("spac"):
+            continue
+        out.append({"name": x.get("name"), "code": x.get("code"), "listed": x.get("listed"), "market": x.get("market"),
+                    "track": x.get("track"), "listType": x.get("listType"), "lo": b[0], "hi": b[1],
+                    "method": x.get("valMethod"), "mult": x.get("valMult"), "sector": x.get("sector"),
+                    "peers": [p.get("n") for p in (x.get("peers") or [])][:12]})
+    out.sort(key=lambda r: r["listed"] or "", reverse=True)
+    (DATA / "ipo_disc.json").write_text(json.dumps({"updated": TODAY.isoformat(), "items": out}, ensure_ascii=False,
+                                                    separators=(",", ":")), "utf-8")
+    log(f"[할인율] 공모 사례 {len(out)}건")
+
+
 # ---------------------------------------------------------------- 저장
 def main():
     DATA.mkdir(exist_ok=True)
     comp_p = DATA / "companies.json"
     old = {}
+    meta = load_meta()
     if comp_p.exists():
         try:
             old = {c["code"]: c for c in json.loads(comp_p.read_text("utf-8"))["items"]}
@@ -424,14 +600,42 @@ def main():
         update_prices(companies)
     except Exception as e:
         log(f"[주가] 실패: {e}")
+    ccorp = {k: v["corp"] for k, v in companies.items() if v.get("corp")}
+    dart = DartBudget(DART_BUDGET) if DART_KEY else None
     try:
-        update_fin(companies, {k: v["corp"] for k, v in companies.items() if v.get("corp")})
+        update_fin(companies, ccorp, dart)
     except Exception as e:
         log(f"[재무] 실패: {e}")
+    meta = load_meta()
+    if dart:
+        for fn in (update_meta, ):
+            try:
+                fn(companies, ccorp, dart, meta)
+            except Exception as e:
+                log(f"[메타] 실패: {e}")
+        try:
+            update_mix(companies, dart, meta)
+        except Exception as e:
+            log(f"[매출비중] 실패: {e}")
+        META_P.write_text(json.dumps(meta, ensure_ascii=False, separators=(",", ":")), "utf-8")
+    try:
+        ipo_discounts()
+    except Exception as e:
+        log(f"[할인율] 실패: {e}")
     items = []
     for code, c in sorted(companies.items()):
+        c.pop("_sectSet", None)
+        if not c.get("sect") and (old.get(code) or {}).get("sect"):
+            c["sect"], c["sectAt"] = old[code]["sect"], old[code].get("sectAt")
         c["px"] = (PX / f"{code}.json").exists()
         c["fin"] = (FIN / f"{code}.json").exists()
+        m = meta.get(code) or {}
+        c["ksic"] = m.get("ksic")
+        c["audit"] = (m.get("audit") or {}).get("opinion")
+        c["auditYear"] = (m.get("audit") or {}).get("year")
+        mix = (m.get("mix") or {}).get("items")
+        c["mix"] = mix or None
+        c["mixYear"] = (m.get("mix") or {}).get("year") if mix else None
         items.append(c)
     st = {}
     try:
