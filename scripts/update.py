@@ -506,28 +506,34 @@ def parse_mix(xml):
         if nc is None:
             nc = next((k for k, c in enumerate(hdr) if re.search(r"부문|구분", c)), 0)
         out = []
+        isnum = lambda t: bool(re.fullmatch(r"[\s\d,.\-()%△▲]*", t or ""))
+        total = lambda t: bool(re.search(r"합계|총계|소계|^계$|^합$|전체", (t or "").replace(" ", "")))
         for r in rows[hdr_i + 1:]:
-            if len(r) != len(hdr):          # 병합된 행은 열이 밀리므로 끝에서부터 맞춤
-                off = len(hdr) - len(r)
-                pi, ni = pc - off, nc - off
-            else:
-                pi, ni = pc, nc
+            off = len(hdr) - len(r)                 # 병합된 행은 앞쪽 칸이 빠져 있으므로 끝에서부터 맞춤
+            pi = pc - off
             if not (0 <= pi < len(r)):
                 continue
-            name = r[ni] if 0 <= ni < len(r) else (r[0] if r else "")
-            if not name or re.fullmatch(r"(합\s*계|총\s*계|계|소\s*계|합계\(.*\))", name.replace(" ", "")) or re.search(r"합계|총계", name):
+            # 이름: 비율 칸 왼쪽에서 숫자가 아닌 가장 오른쪽 글자 칸(금액 칸은 건너뜀)
+            cand = [t for t in r[:pi] if t and not isnum(t)]
+            if not cand:
+                continue
+            name = cand[-1]
+            if any(total(t) for t in r[:pi]) or total(name):
                 continue
             v = re.sub(r"[^0-9.\-]", "", r[pi])
             try:
                 pct = float(v)
             except ValueError:
                 continue
-            if 0 < pct <= 100:
-                out.append({"n": name[:40], "p": round(pct, 2)})
+            if 0 < pct < 100:
+                out.append({"n": re.sub(r"\s+", " ", name)[:40], "p": round(pct, 2)})
         if out:
             out.sort(key=lambda x: -x["p"])
             return out[:6]
     return None
+
+
+MIX_VER = 2
 
 
 def update_mix(companies, dart, meta):
@@ -546,7 +552,7 @@ def update_mix(companies, dart, meta):
                 continue
             rc = fin["r"][fys[0]]["rcept"]
             m = meta.setdefault(code, {})
-            if (m.get("mix") or {}).get("rcept") == rc:
+            if (m.get("mix") or {}).get("rcept") == rc and (m.get("mix") or {}).get("v") == MIX_VER:
                 continue
             tried += 1
             try:
@@ -565,7 +571,7 @@ def update_mix(companies, dart, meta):
             except Exception as e:
                 log(f"  - {code} 매출비중 실패: {e}")
                 continue
-            m["mix"] = {"rcept": rc, "year": fys[0][:4], "items": mix}
+            m["mix"] = {"rcept": rc, "year": fys[0][:4], "items": mix, "v": MIX_VER}
             if mix:
                 n += 1
             time.sleep(0.1)
@@ -670,7 +676,7 @@ def main():
         c["ksic"] = m.get("ksic")
         c["audit"] = (m.get("audit") or {}).get("opinion")
         c["auditYear"] = (m.get("audit") or {}).get("year")
-        mix = (m.get("mix") or {}).get("items")
+        mix = (m.get("mix") or {}).get("items") if (m.get("mix") or {}).get("v") == MIX_VER else None
         c["mix"] = mix or None
         c["mixYear"] = (m.get("mix") or {}).get("year") if mix else None
         items.append(c)
