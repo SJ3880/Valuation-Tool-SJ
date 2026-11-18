@@ -20,7 +20,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 1) 화면부터 바로 올림(데이터 수집이 길어도 사이트는 먼저 열리게)
+  deploy-first:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+          name: site-first
+      - uses: actions/deploy-pages@v4
+        with:
+          artifact_name: site-first
+
+  # 2) 데이터 수집(주가·재무) → 저장 → 다시 배포
   update-and-deploy:
+    needs: deploy-first
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     environment:
