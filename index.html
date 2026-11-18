@@ -280,7 +280,7 @@ async function getJSON(u){ const r = await fetch(u, { cache: 'no-cache' }); if (
 async function load(code){
   if (CACHE[code]) return CACHE[code];
   const c = BY[code] || {};
-  const [px, fin] = await Promise.all([c.px ? getJSON(`data/px/${code}.json`).catch(() => null) : null, c.fin ? getJSON(`data/fin/${code}.json`).catch(() => null) : null]);
+  const [px, fin] = await Promise.all([getJSON(`data/px/${code}.json`).catch(() => null), c.fin || c.fin === undefined || true ? getJSON(`data/fin/${code}.json`).catch(() => null) : null]);
   return CACHE[code] = { px, fin };
 }
 async function loadMany(codes){
@@ -761,7 +761,7 @@ async function buildExcel(){
     const nPx = COMP.filter(c => c.px).length, nFin = COMP.filter(c => c.fin).length;
     $('#upd').textContent = `마지막 업데이트 ${j.updated} (KST) · 시세 ${j.pxLast || '없음'} · 상장사 ${COMP.length.toLocaleString()}개 · 재무 ${nFin.toLocaleString()}개`;
     const w = [];
-    if (!nPx) w.push('아직 주가 데이터가 없어요. KRX 키가 들어간 뒤 첫 업데이트에서 약 2년치 시세를 받습니다.');
+    if (!nPx && !j.pxLast) w.push('아직 주가 데이터가 없어요. KRX 키가 들어간 뒤 첫 업데이트에서 약 2년치 시세를 받습니다.');
     if (nFin < COMP.length * 0.8) w.push(`재무 데이터를 받는 중이에요(${nFin.toLocaleString()} / ${COMP.length.toLocaleString()}개사). DART 하루 호출 한도 때문에 며칠에 나눠 채워집니다.`);
     $('#warnBox').innerHTML = w.map(x => `<div class="warn">${esc(x)}</div>`).join('');
     if (!ST.baseDate) ST.baseDate = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);

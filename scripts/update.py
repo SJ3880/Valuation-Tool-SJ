@@ -151,7 +151,7 @@ def update_prices(companies):
     series = {}                         # code -> {date: (close, vol, val, shares, mcap)}
     got = 0
     for d in todo:
-        if mins() > TIME_LIMIT_MIN * 0.45:
+        if mins() > TIME_LIMIT_MIN * (0.95 if os.environ.get("ONLY_PRICES") else 0.45):
             log("[주가] 시간 제한 → 나머지는 다음 실행에")
             break
         rows = krx_day(d)
@@ -599,7 +599,18 @@ def ipo_discounts():
 
 
 # ---------------------------------------------------------------- 저장
+def prices_only():
+    """주가만 받기(다른 수집과 따로, 바로 돌릴 때)"""
+    comp_p = DATA / "companies.json"
+    companies = {c["code"]: c for c in json.loads(comp_p.read_text("utf-8"))["items"]}
+    update_prices(companies)
+    n = len(list(PX.glob("*.json"))) if PX.exists() else 0
+    log(f"[주가만] 종목 파일 {n}개 · {mins():.0f}분")
+
+
 def main():
+    if os.environ.get("ONLY_PRICES"):
+        return prices_only()
     DATA.mkdir(exist_ok=True)
     comp_p = DATA / "companies.json"
     old = {}
