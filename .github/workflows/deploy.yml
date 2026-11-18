@@ -1,0 +1,30 @@
+# 지금 저장된 데이터·화면을 바로 사이트에 올리기(수동)
+name: 사이트만 다시 올리기
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: deploy-only
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+          name: site-now
+      - uses: actions/deploy-pages@v4
+        with:
+          artifact_name: site-now
