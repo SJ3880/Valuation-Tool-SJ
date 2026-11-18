@@ -198,8 +198,10 @@ def update_prices(companies):
 # ---------------------------------------------------------------- 3) 재무(DART)
 class DartBudget:
     def __init__(self, n):
+        import threading
         self.left = n
         self.calls = 0
+        self.lock = threading.Lock()
 
     def get(self, path, **params):
         if self.left <= 0:
@@ -209,9 +211,9 @@ class DartBudget:
             try:
                 r = requests.get(f"{DART_API}/{path}", params=params, timeout=60)
                 r.raise_for_status()
-                self.left -= 1
-                self.calls += 1
-                time.sleep(0.08)
+                with self.lock:
+                    self.left -= 1
+                    self.calls += 1
                 j = r.json()
                 if j.get("status") == "020":        # 사용한도 초과
                     self.left = 0
@@ -229,16 +231,15 @@ REPORTS = {"11013": "1Q", "11012": "2Q", "11014": "3Q", "11011": "FY"}
 
 
 def wanted_reports():
-    """지금 시점에 받아 둘 보고서: 최근 사업연도 2개 + 올해·작년 분기들(LTM·연환산 계산용)"""
+    """LTM 계산에 필요한 것만: 최근 사업보고서 + 그 뒤 가장 최근 분기·반기보고서(제출기한 지난 것)"""
     y = TODAY.year
-    out = [(y - 1, "11011"), (y - 2, "11011")]
-    # 분기보고서 제출기한(분기말+45일) 지난 것만
+    fy = y - 1 if TODAY > date(y, 3, 31) else y - 2
+    out = [(fy, "11011")]
     for (yy, rc, end) in ((y, "11014", date(y, 11, 14)), (y, "11012", date(y, 8, 14)), (y, "11013", date(y, 5, 15)),
-                          (y - 1, "11014", date(y - 1, 11, 14)), (y - 1, "11012", date(y - 1, 8, 14))):
-        if TODAY > end:
+                          (y - 1, "11014", date(y - 1, 11, 14))):
+        if TODAY > end and yy > fy:
             out.append((yy, rc))
-    if TODAY < date(y, 3, 31):      # 작년 사업보고서 나오기 전이면 재작년 3분기까지
-        out.append((y - 2, "11014"))
+            break
     return out
 
 
@@ -362,23 +363,27 @@ def update_fin(companies, cmap, dart):
     want = wanted_reports()
     log(f"[재무] 받을 보고서: {[(y, REPORTS[r]) for y, r in want]}")
     codes = sorted(companies, key=lambda c: (companies[c]["market"] != "코스닥", c))   # 코스닥 먼저(IPO 비교회사 대부분)
-    done_corp = 0
-    try:
-        for code in codes:
-            if mins() > TIME_LIMIT_MIN * 0.75:
-                log("[재무] 시간 제한 → 나머지는 다음 실행에")
-                break
-            if dart.left < 2500:            # 메타(감사의견 등)·매출비중 몫 남겨둠
-                log("[재무] 이번 실행 몫 다 씀 → 나머지는 다음 실행에")
-                break
-            corp = cmap.get(code)
-            if not corp:
-                continue
-            p = FIN / f"{code}.json"
-            cur = json.loads(p.read_text("utf-8")) if p.exists() else {"code": code, "corp": corp, "r": {}}
-            if cur.get("ver") != FIN_VER:
-                cur["r"], cur["ver"] = {}, FIN_VER
-            changed = False
+    from concurrent.futures import ThreadPoolExecutor
+    stop = {"why": None}
+
+    def one(code):
+        if stop["why"]:
+            return 0
+        if mins() > TIME_LIMIT_MIN * 0.75:
+            stop["why"] = "시간 제한"
+            return 0
+        if dart.left < 2500:                # 메타(감사의견 등)·매출비중 몫 남겨둠
+            stop["why"] = "이번 실행 몫 다 씀"
+            return 0
+        corp = cmap.get(code)
+        if not corp:
+            return 0
+        p = FIN / f"{code}.json"
+        cur = json.loads(p.read_text("utf-8")) if p.exists() else {"code": code, "corp": corp, "r": {}}
+        if cur.get("ver") != FIN_VER:
+            cur["r"], cur["ver"] = {}, FIN_VER
+        changed = False
+        try:
             for y, rc in want:
                 k = f"{y}{REPORTS[rc]}"
                 old = cur["r"].get(k)
@@ -394,11 +399,19 @@ def update_fin(companies, cmap, dart):
                     d["at"] = TODAY.isoformat()
                     cur["r"][k] = d
                 changed = True
-            if changed:
-                p.write_text(json.dumps(cur, ensure_ascii=False, separators=(",", ":")), "utf-8")
-                done_corp += 1
-    except StopIteration as e:
-        log(f"[재무] {e} → 나머지는 다음 실행에")
+        except StopIteration as e:
+            stop["why"] = str(e)
+        except Exception as e:
+            log(f"  - {code} 재무 실패: {e}")
+        if changed:
+            p.write_text(json.dumps(cur, ensure_ascii=False, separators=(",", ":")), "utf-8")
+            return 1
+        return 0
+
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        done_corp = sum(ex.map(one, codes))
+    if stop["why"]:
+        log(f"[재무] {stop['why']} → 나머지는 다음 실행에")
     log(f"[재무] 회사 {done_corp}개 갱신 · DART 호출 {dart.calls}회")
 
 
@@ -417,32 +430,45 @@ def load_meta():
 def update_meta(companies, cmap, dart, meta):
     """DART 기업개황(표준산업분류 코드)·최근 사업연도 감사의견. 한 번 받으면 1년에 한 번만 다시"""
     fy = TODAY.year - 1 if TODAY.month >= 4 else TODAY.year - 2
-    n = 0
-    try:
-        for code in sorted(companies, key=lambda c: (companies[c]["market"] != "코스닥", c)):
-            if mins() > TIME_LIMIT_MIN:
-                break
-            corp = cmap.get(code)
-            if not corp:
-                continue
-            m = meta.setdefault(code, {})
+    from concurrent.futures import ThreadPoolExecutor
+    stop = {"why": None}
+
+    def one(code):
+        if stop["why"] or mins() > TIME_LIMIT_MIN or dart.left < 300:
+            return 0
+        corp = cmap.get(code)
+        if not corp:
+            return 0
+        m = dict(meta.get(code) or {})
+        k = 0
+        try:
             if not m.get("ksic"):
                 j = dart.get("company.json", corp_code=corp)
                 if j.get("status") == "000":
                     m["ksic"] = j.get("induty_code") or None
                     m["est"] = j.get("est_dt") or None
-                    n += 1
+                    k += 1
             if (m.get("audit") or {}).get("year") != fy:
                 j = dart.get("accnutAdtorNmNdAdtOpinion.json", corp_code=corp, bsns_year=str(fy), reprt_code="11011")
                 if j.get("status") == "000" and j.get("list"):
                     row = next((r for r in j["list"] if "당기" in (r.get("bsns_year") or "")), j["list"][0])
                     m["audit"] = {"year": fy, "opinion": (row.get("adt_opinion") or "").strip() or None,
                                   "auditor": (row.get("adtor") or "").strip() or None}
-                    n += 1
+                    k += 1
                 elif j.get("status") == "013":
                     m["audit"] = {"year": fy, "opinion": None}
-    except StopIteration as e:
-        log(f"[메타] {e}")
+        except StopIteration as e:
+            stop["why"] = str(e)
+        except Exception as e:
+            log(f"  - {code} 메타 실패: {e}")
+        meta[code] = m
+        return k
+
+    codes = sorted(companies, key=lambda c: (companies[c]["market"] != "코스닥", c))
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        n = sum(ex.map(one, codes))
+    if stop["why"]:
+        log(f"[메타] {stop['why']}")
     log(f"[메타] 표준산업분류·감사의견 {n}건 갱신")
 
 
