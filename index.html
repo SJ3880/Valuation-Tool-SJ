@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Peer 밸류에이션</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#f6f7f9">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Peer 밸류">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -246,7 +253,9 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const LS = { get(k, d){ try { const v = localStorage.getItem('pv:' + k); return v == null ? d : JSON.parse(v); } catch(e){ return d; } },
              set(k, v){ try { localStorage.setItem('pv:' + k, JSON.stringify(v)); } catch(e){} } };
 function applyTheme(t){ if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', t);
-  $$('#themeSeg button').forEach(b => b.classList.toggle('on', b.dataset.t === t)); LS.set('theme', t); }
+  $$('#themeSeg button').forEach(b => b.classList.toggle('on', b.dataset.t === t)); LS.set('theme', t);
+  const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0e1116' : '#f6f7f9'); }
 $$('#themeSeg button').forEach(b => b.onclick = () => applyTheme(b.dataset.t));
 applyTheme(LS.get('theme', 'auto'));
 
@@ -769,6 +778,7 @@ async function buildExcel(){
   try { DISC = (await getJSON('data/ipo_disc.json')).items || []; } catch (e) { DISC = []; }
   bindAll(); showStep(ST.step || 'pop'); await refresh();
 })();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});   // 앱 설치용
 </script>
 </body>
 </html>
