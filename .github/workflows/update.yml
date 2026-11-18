@@ -1,0 +1,61 @@
+# Peer 밸류에이션 — 데이터 업데이트 & 배포
+# 평일 아침 08:30(한국시간): 전날 KRX 시세, 새로 나온 DART 정기보고서 재무를 받아 사이트를 다시 올립니다.
+name: 데이터 업데이트 & 배포
+
+on:
+  schedule:
+    - cron: "30 23 * * 0-4"   # UTC 23:30(일~목) = KST 08:30(월~금)
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ["data/**"]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  update-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: 패키지 설치
+        run: pip install -r scripts/requirements.txt
+      - name: 데이터 수집
+        env:
+          KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          TIME_LIMIT_MIN: "200"
+        run: python scripts/update.py
+        timeout-minutes: 230
+      - name: 데이터 저장(커밋)
+        if: ${{ !cancelled() }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          git diff --cached --quiet && exit 0
+          git commit -m "데이터 업데이트 $(TZ=Asia/Seoul date +'%Y-%m-%d %H:%M')"
+          git pull --rebase -X theirs origin main || true
+          git push
+      - uses: actions/configure-pages@v5
+        if: ${{ !cancelled() }}
+      - uses: actions/upload-pages-artifact@v3
+        if: ${{ !cancelled() }}
+        with:
+          path: .
+      - id: deploy
+        if: ${{ !cancelled() }}
+        uses: actions/deploy-pages@v4

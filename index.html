@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Peer 밸류에이션</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--panel2:#f1f4f8;--line:#e3e7ed;--text:#18202b;--mu:#6b7380;--accent:#2563eb;--accent2:#e8efff;--good:#0f9d58;--bad:#d93025;--warn:#b26a00;--chip:#eef2f7}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1116;--panel:#161b22;--panel2:#1d232c;--line:#2a313b;--text:#e6e9ee;--mu:#8b94a3;--accent:#5b8dff;--accent2:#1c2a4a;--good:#34c47c;--bad:#ff6b6b;--warn:#e0a03a;--chip:#222a35}}
+:root[data-theme="dark"]{--bg:#0e1116;--panel:#161b22;--panel2:#1d232c;--line:#2a313b;--text:#e6e9ee;--mu:#8b94a3;--accent:#5b8dff;--accent2:#1c2a4a;--good:#34c47c;--bad:#ff6b6b;--warn:#e0a03a;--chip:#222a35}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 "Noto Sans KR",system-ui,sans-serif}
+.wrap{max-width:1320px;margin:0 auto;padding:20px 16px 60px}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+h1{font-size:26px;font-weight:800;margin:4px 0 2px}
+.sub{color:var(--mu);font-size:13px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:none;color:var(--text);padding:5px 11px;font:inherit;font-size:12px;cursor:pointer}
+.seg button.on{background:var(--accent);color:#fff}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:8px;padding:6px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.pri:hover{opacity:.9;color:#fff}
+.btn:disabled{opacity:.5;cursor:default}
+.grid{display:grid;grid-template-columns:330px 1fr;gap:16px;margin-top:16px}
+@media (max-width:980px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card h2{font-size:15px;margin:0 0 10px;font-weight:700}
+.card h3{font-size:13px;margin:14px 0 6px;color:var(--mu);font-weight:600}
+label.f{display:block;font-size:12px;color:var(--mu);margin:10px 0 4px}
+input[type=text],input[type=number],input[type=date],select{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font:inherit;font-size:13px}
+input:focus,select:focus{outline:2px solid var(--accent2);border-color:var(--accent)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.chk{display:flex;align-items:center;gap:6px;font-size:13px;margin:5px 0;cursor:pointer}
+.mu{color:var(--mu)}
+.small{font-size:12px}
+.search{position:relative}
+.sugg{position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-top:4px;max-height:320px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.15)}
+.sugg div{padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--line)}
+.sugg div:hover,.sugg div.act{background:var(--accent2)}
+.sugg .s2{font-size:11px;color:var(--mu)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{display:inline-flex;align-items:center;gap:4px;background:var(--chip);border-radius:999px;padding:3px 6px 3px 10px;font-size:12px}
+.chip button{border:0;background:none;color:var(--mu);cursor:pointer;font-size:14px;line-height:1;padding:0 3px}
+.chip button:hover{color:var(--bad)}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{background:var(--panel2);font-weight:600;font-size:12px;color:var(--mu);position:sticky;top:0}
+th.l,td.l{text-align:left}
+td.nm{font-weight:700;position:sticky;left:0;background:var(--panel)}
+th.nm{position:sticky;left:0;z-index:2}
+tr.off td{opacity:.42}
+tr.off td.nm{opacity:1;text-decoration:line-through;color:var(--mu)}
+tr.avg td{font-weight:700;background:var(--panel2)}
+tr.avg td.nm{background:var(--panel2)}
+.x{color:var(--mu);font-size:11px;font-weight:400}
+.neg{color:var(--bad)}
+.tag{display:inline-block;font-size:11px;padding:0 6px;border-radius:6px;background:var(--chip);color:var(--mu);margin-left:4px;font-weight:500}
+.res{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}
+.kpi{background:var(--panel2);border-radius:10px;padding:10px 12px}
+.kpi .k{font-size:12px;color:var(--mu)}
+.kpi .v{font-size:20px;font-weight:800;margin-top:2px}
+.kpi .v small{font-size:12px;font-weight:500;color:var(--mu)}
+.band{font-size:24px;font-weight:800;color:var(--accent)}
+.note{font-size:12px;color:var(--mu);margin-top:10px;line-height:1.6}
+.warn{background:#fff7e6;color:#8a5a00;border:1px solid #f3d9a4;border-radius:8px;padding:8px 12px;font-size:13px;margin-top:12px}
+:root[data-theme="dark"] .warn{background:#2a2110;color:#e8c27a;border-color:#4d3b17}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .warn{background:#2a2110;color:#e8c27a;border-color:#4d3b17}}
+.empty{padding:40px 10px;text-align:center;color:var(--mu)}
+.metric-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.metric-tabs button{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:4px 11px;font:inherit;font-size:12px;cursor:pointer}
+.metric-tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <h1>Peer 밸류에이션</h1>
+      <div class="sub" id="upd">데이터 불러오는 중…</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn" id="xlsBtn" disabled>⬇ 엑셀로 다운로드</button>
+      <div class="seg" id="themeSeg"><button data-t="auto">자동</button><button data-t="light">☀ 밝게</button><button data-t="dark">🌙 어둡게</button></div>
+    </div>
+  </div>
+  <div id="warnBox"></div>
+
+  <div class="grid">
+    <!-- 왼쪽: 설정 -->
+    <div>
+      <div class="card">
+        <h2>1. 비교회사 선택</h2>
+        <div class="search">
+          <input type="text" id="q" placeholder="회사명·종목코드·업종·제품 검색" autocomplete="off">
+          <div class="sugg" id="sugg" hidden></div>
+        </div>
+        <div class="chips" id="chips"></div>
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn" id="recBtn" disabled title="첫 번째 비교회사와 같은 업종(코스피·코스닥)에서 시가총액 순으로 후보를 보여줍니다">같은 업종 후보 보기</button>
+          <button class="btn" id="clrBtn">모두 지우기</button>
+        </div>
+        <div id="rec"></div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h2>2. 기준</h2>
+        <label class="f">기준일</label>
+        <input type="date" id="baseDate">
+        <label class="f">기준주가</label>
+        <select id="pxMode">
+          <option value="close">기준일 종가</option>
+          <option value="avg1w">1주일 평균 종가</option>
+          <option value="avg1m" selected>1개월 평균 종가</option>
+          <option value="vwap1w">1주일 거래량가중평균</option>
+          <option value="vwap1m">1개월 거래량가중평균</option>
+          <option value="min3">종가·1주·1개월 평균 중 낮은 값</option>
+          <option value="avg3">종가·1주·1개월 평균의 산술평균</option>
+        </select>
+        <label class="f">이익 기준</label>
+        <select id="earnMode">
+          <option value="ltm" selected>최근 4분기 합산(LTM)</option>
+          <option value="fy">최근 사업연도</option>
+          <option value="ann">최근 보고서 누적 연환산</option>
+        </select>
+        <label class="f">발행주식수 기준</label>
+        <select id="shMode">
+          <option value="list" selected>상장주식수(기준일)</option>
+        </select>
+        <h3>EV 계산</h3>
+        <label class="chk"><input type="checkbox" id="evLease"> 순차입금에 리스부채 포함</label>
+        <label class="chk"><input type="checkbox" id="evStf" checked> 단기금융상품을 현금으로 차감</label>
+        <h3>제외 규칙</h3>
+        <label class="chk"><input type="checkbox" id="exNeg" checked> 분모가 0 이하(적자 등)인 지표 제외</label>
+        <div class="row2">
+          <div><label class="f">PER 상한(배)</label><input type="number" id="perMax" value="100" min="0"></div>
+          <div><label class="f">EV/EBITDA 상한(배)</label><input type="number" id="evMax" value="" min="0" placeholder="없음"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 오른쪽: 결과 -->
+    <div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <h2 style="margin:0">3. 비교회사 배수</h2>
+          <div class="metric-tabs" id="units"><button data-u="1e8" class="on">억원</button><button data-u="1e6">백만원</button></div>
+        </div>
+        <div class="scroll" style="margin-top:10px"><table id="tbl"></table></div>
+        <div class="note" id="tblNote"></div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h2>4. 공모가 산정</h2>
+        <div class="metric-tabs" id="methodTabs">
+          <button data-m="per" class="on">PER</button><button data-m="ev">EV/EBITDA</button><button data-m="pbr">PBR</button><button data-m="psr">PSR</button>
+        </div>
+        <div class="row2" style="margin-top:8px">
+          <div><label class="f">적용 배수(배) <span class="x">비워두면 평균</span></label><input type="number" id="appMult" step="0.01"></div>
+          <div><label class="f" id="tgtLbl">대상회사 지배주주순이익(억원)</label><input type="number" id="tgtEarn" step="0.01"></div>
+        </div>
+        <div class="row2">
+          <div id="tgtNdWrap" hidden><label class="f">대상회사 순차입금(억원)</label><input type="number" id="tgtNd" step="0.01" value="0"></div>
+          <div><label class="f">공모 후 발행주식수(주)</label><input type="number" id="tgtSh"></div>
+        </div>
+        <div class="row2">
+          <div><label class="f">할인율 하단(%)</label><input type="number" id="dLo" value="20" step="0.1"></div>
+          <div><label class="f">할인율 상단(%)</label><input type="number" id="dHi" value="35" step="0.1"></div>
+        </div>
+        <div class="res" id="res"></div>
+        <div class="note">희망공모가는 호가 단위로 내림(하단·상단 모두) 처리합니다. 할인율 상단을 적용한 가격이 밴드 하단입니다.</div>
+      </div>
+    </div>
+  </div>
+  <div class="note" style="margin-top:20px">주가: 한국거래소(KRX) Open API 일별매매정보 · 재무: 금융감독원 DART 정기보고서(연결 우선, 없으면 별도) · 업종·주요제품: KIND 상장법인목록. 매일 아침 자동 업데이트.</div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+const store = { get(k, d){ try { const v = localStorage.getItem('val:' + k); return v == null ? d : JSON.parse(v); } catch(e){ return d; } },
+                set(k, v){ try { localStorage.setItem('val:' + k, JSON.stringify(v)); } catch(e){} } };
+
+/* 테마 */
+function applyTheme(t){ if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', t);
+  $$('#themeSeg button').forEach(b => b.classList.toggle('on', b.dataset.t === t)); store.set('theme', t); }
+$$('#themeSeg button').forEach(b => b.onclick = () => applyTheme(b.dataset.t));
+applyTheme(store.get('theme', 'auto'));
+
+let COMP = [], BY = {}, META = {}, PEERS = store.get('peers', []), CACHE = {}, UNIT = 1e8, METHOD = store.get('method', 'per');
+const fmt = (v, d = 0) => v == null || !isFinite(v) ? '–' : v.toLocaleString('ko-KR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const amt = v => v == null ? '–' : `<span class="${v < 0 ? 'neg' : ''}">${fmt(v / UNIT, UNIT === 1e8 ? 0 : 0)}</span>`;
+const mult = v => v == null || !isFinite(v) ? '–' : fmt(v, 2);
+
+/* ---------- 데이터 ---------- */
+async function getJSON(u){ const r = await fetch(u, { cache: 'no-cache' }); if (!r.ok) throw new Error(u + ' ' + r.status); return r.json(); }
+async function load(code){
+  if (CACHE[code]) return CACHE[code];
+  const c = BY[code] || { code };
+  const [px, fin] = await Promise.all([
+    c.px === false ? null : getJSON(`data/px/${code}.json`).catch(() => null),
+    c.fin === false ? null : getJSON(`data/fin/${code}.json`).catch(() => null)]);
+  return CACHE[code] = { px, fin };
+}
+
+/* ---------- 기준주가 ---------- */
+function pxWindow(px, base, days){
+  // base(YYYY-MM-DD) 포함, base-days 초과 구간
+  const from = new Date(base); from.setDate(from.getDate() - days); const f = from.toISOString().slice(0, 10);
+  const idx = []; for (let i = 0; i < px.d.length; i++) if (px.d[i] > f && px.d[i] <= base) idx.push(i);
+  return idx;
+}
+function basePrice(px, base, mode){
+  if (!px || !px.d.length) return null;
+  let last = -1; for (let i = 0; i < px.d.length; i++) if (px.d[i] <= base) last = i;
+  if (last < 0) return null;
+  const close = px.c[last];
+  const avg = days => { const ix = pxWindow(px, base, days); return ix.length ? ix.reduce((s, i) => s + px.c[i], 0) / ix.length : null; };
+  const vw = days => { const ix = pxWindow(px, base, days); const v = ix.reduce((s, i) => s + (px.v[i] || 0), 0), a = ix.reduce((s, i) => s + (px.a[i] || 0), 0); return v ? a / v : null; };
+  const a1w = avg(7), a1m = avg(30);
+  const map = { close, avg1w: a1w, avg1m: a1m, vwap1w: vw(7), vwap1m: vw(30),
+    min3: Math.min(...[close, a1w, a1m].filter(x => x != null)), avg3: [close, a1w, a1m].filter(x => x != null).reduce((s, x, _, arr) => s + x / arr.length, 0) };
+  return { price: map[mode], close, date: px.d[last], shares: px.s[last], stale: px.d[last] < base && (new Date(base) - new Date(px.d[last])) / 864e5 > 10 };
+}
+
+/* ---------- 재무: 기준일에 공시돼 있던 보고서로 ---------- */
+const QM = { '1Q': 3, '2Q': 6, '3Q': 9, 'FY': 12 };
+const filed = r => r && r.rcept ? `${r.rcept.slice(0, 4)}-${r.rcept.slice(4, 6)}-${r.rcept.slice(6, 8)}` : null;
+function reportsBefore(fin, base){
+  const out = [];
+  for (const [k, r] of Object.entries((fin && fin.r) || {})) {
+    if (!r || r.none || r.err) continue;
+    const f = filed(r); if (f && f > base) continue;
+    const y = +k.slice(0, 4), q = k.slice(4);
+    out.push({ k, y, q, m: QM[q], r, filed: f });
+  }
+  out.sort((a, b) => a.y - b.y || a.m - b.m);
+  return out;
+}
+const KEYS = ['rev', 'op', 'ni', 'niP', 'da'];
+function earnings(fin, base, mode){
+  const reps = reportsBefore(fin, base);
+  if (!reps.length) return null;
+  const last = reps[reps.length - 1];
+  const fy = [...reps].reverse().find(x => x.q === 'FY');
+  const out = { bs: last.r, label: '', fs: last.r.fs };
+  const flow = {};
+  if (mode === 'fy' || last.q === 'FY') {
+    if (!fy) return null;
+    KEYS.forEach(k => flow[k] = fy.r[k]);
+    out.label = `${fy.y} 사업연도`; out.fs = fy.r.fs;
+  } else if (mode === 'ann') {
+    KEYS.forEach(k => flow[k] = last.r[k] == null ? null : last.r[k] * 12 / last.m);
+    out.label = `${last.y} ${last.q} 누적×${(12 / last.m).toFixed(2).replace(/\.?0+$/, '')}`;
+  } else {
+    const pfy = reps.find(x => x.q === 'FY' && x.y === last.y - 1);
+    if (!pfy) { // 직전 사업연도 없으면 연환산으로
+      KEYS.forEach(k => flow[k] = last.r[k] == null ? null : last.r[k] * 12 / last.m);
+      out.label = `${last.y} ${last.q} 누적 연환산(직전연도 없음)`;
+    } else {
+      KEYS.forEach(k => { const a = pfy.r[k], b = last.r[k], c = last.r[k + '_p'];
+        flow[k] = a == null || b == null || c == null ? null : a + b - c; });
+      out.label = `LTM ${last.y} ${last.q}`;
+    }
+  }
+  out.flow = flow;
+  out.ni = flow.niP ?? flow.ni;
+  out.ebitda = flow.op == null ? null : flow.op + (flow.da || 0);
+  return out;
+}
+
+/* ---------- 계산 ---------- */
+function opts(){ return { base: $('#baseDate').value, pxMode: $('#pxMode').value, earnMode: $('#earnMode').value,
+  lease: $('#evLease').checked, stf: $('#evStf').checked, exNeg: $('#exNeg').checked,
+  perMax: +$('#perMax').value || null, evMax: +$('#evMax').value || null }; }
+function rowFor(code, o){
+  const c = BY[code] || { code, name: code }, d = CACHE[code] || {};
+  const bp = basePrice(d.px, o.base, o.pxMode);
+  const e = earnings(d.fin, o.base, o.earnMode);
+  const r = { code, name: c.name, market: c.market, sector: c.sector, bp, e, why: [] };
+  if (!bp) r.why.push('주가 없음');
+  if (!e) r.why.push('재무 없음');
+  if (bp && bp.price) { r.price = bp.price; r.shares = bp.shares; r.mcap = bp.price * bp.shares; }
+  if (e) {
+    const bs = e.bs;
+    r.ni = e.ni; r.ebitda = e.ebitda; r.rev = e.flow.rev; r.equity = bs.equityP ?? bs.equity;
+    const debt = (bs.debt || 0) + (o.lease ? (bs.lease || 0) : 0), cash = (bs.cash || 0) + (o.stf ? (bs.stFin || 0) : 0);
+    r.nd = debt - cash;
+  }
+  if (r.mcap != null) {
+    r.per = r.ni ? r.mcap / r.ni : null;
+    r.ev = r.nd != null ? r.mcap + r.nd : null;
+    r.evx = r.ebitda && r.ev != null ? r.ev / r.ebitda : null;
+    r.pbr = r.equity ? r.mcap / r.equity : null;
+    r.psr = r.rev ? r.mcap / r.rev : null;
+  }
+  // 지표별 사용 여부
+  r.use = {}; r.note = {};
+  for (const [m, val, den] of [['per', r.per, r.ni], ['ev', r.evx, r.ebitda], ['pbr', r.pbr, r.equity], ['psr', r.psr, r.rev]]) {
+    let ok = val != null && isFinite(val);
+    if (ok && o.exNeg && !(den > 0)) { ok = false; r.note[m] = '적자/음수'; }
+    if (ok && m === 'per' && o.perMax && val > o.perMax) { ok = false; r.note[m] = `${o.perMax}배 초과`; }
+    if (ok && m === 'ev' && o.evMax && val > o.evMax) { ok = false; r.note[m] = `${o.evMax}배 초과`; }
+    r.use[m] = ok;
+  }
+  r.on = !(store.get('off', {})[code]);
+  return r;
+}
+function stats(rows, m){
+  const key = { per: 'per', ev: 'evx', pbr: 'pbr', psr: 'psr' }[m];
+  const v = rows.filter(r => r.on && r.use[m]).map(r => r[key]).sort((a, b) => a - b);
+  if (!v.length) return { n: 0 };
+  const mean = v.reduce((s, x) => s + x, 0) / v.length;
+  const med = v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2;
+  return { n: v.length, mean, med, min: v[0], max: v[v.length - 1] };
+}
+const tick = p => p < 2000 ? 1 : p < 5000 ? 5 : p < 20000 ? 10 : p < 50000 ? 50 : p < 200000 ? 100 : p < 500000 ? 500 : 1000;
+const floorTick = p => Math.floor(p / tick(p)) * tick(p);
+
+let LAST = null;
+function render(){
+  const o = opts();
+  const rows = PEERS.map(c => rowFor(c, o));
+  LAST = { o, rows };
+  const S = { per: stats(rows, 'per'), ev: stats(rows, 'ev'), pbr: stats(rows, 'pbr'), psr: stats(rows, 'psr') };
+  LAST.S = S;
+  const u = UNIT === 1e8 ? '억원' : '백만원';
+  const th = `<tr><th class="l nm">회사</th><th class="l">시장</th><th>기준주가<br><span class="x">원</span></th><th>주식수<br><span class="x">주</span></th><th>시가총액<br><span class="x">${u}</span></th>
+    <th>순이익(지배)<br><span class="x">${u}</span></th><th>PER<br><span class="x">배</span></th><th>EBITDA<br><span class="x">${u}</span></th><th>순차입금<br><span class="x">${u}</span></th><th>EV<br><span class="x">${u}</span></th><th>EV/EBITDA<br><span class="x">배</span></th>
+    <th>자본(지배)<br><span class="x">${u}</span></th><th>PBR<br><span class="x">배</span></th><th>매출<br><span class="x">${u}</span></th><th>PSR<br><span class="x">배</span></th><th class="l">재무 기준</th><th>포함</th></tr>`;
+  const cell = (r, m, v) => { const ok = r.use[m]; return `<td title="${esc(r.note[m] || '')}" style="${ok ? '' : 'color:var(--mu)'}">${mult(v)}${!ok && r.note[m] ? `<div class="x">${esc(r.note[m])}</div>` : ''}</td>`; };
+  const body = rows.map(r => `<tr class="${r.on ? '' : 'off'}">
+    <td class="l nm">${esc(r.name)}<div class="x">${esc(r.code)}${r.bp && r.bp.stale ? ' · <span style="color:var(--warn)">시세 오래됨</span>' : ''}</div></td>
+    <td class="l">${esc(r.market || '')}</td>
+    <td>${fmt(r.price)}<div class="x">${r.bp ? esc(r.bp.date) : ''}</div></td><td>${fmt(r.shares)}</td><td>${amt(r.mcap)}</td>
+    <td>${amt(r.ni)}</td>${cell(r, 'per', r.per)}<td>${amt(r.ebitda)}</td><td>${amt(r.nd)}</td><td>${amt(r.ev)}</td>${cell(r, 'ev', r.evx)}
+    <td>${amt(r.equity)}</td>${cell(r, 'pbr', r.pbr)}<td>${amt(r.rev)}</td>${cell(r, 'psr', r.psr)}
+    <td class="l small">${r.e ? `${esc(r.e.label)} <span class="tag">${esc(r.e.fs || '')}</span>` : `<span class="mu">${esc(r.why.join(', '))}</span>`}</td>
+    <td><input type="checkbox" data-on="${esc(r.code)}" ${r.on ? 'checked' : ''}></td></tr>`).join('');
+  const sr = (lbl, k) => `<tr class="avg"><td class="l nm">${lbl}</td><td></td><td></td><td></td><td></td><td></td><td>${mult(S.per[k])}</td><td></td><td></td><td></td><td>${mult(S.ev[k])}</td><td></td><td>${mult(S.pbr[k])}</td><td></td><td>${mult(S.psr[k])}</td><td class="l small mu">PER ${S.per.n}개 · EV ${S.ev.n}개 · PBR ${S.pbr.n}개 · PSR ${S.psr.n}개</td><td></td></tr>`;
+  $('#tbl').innerHTML = rows.length ? th + body + sr('평균', 'mean') + sr('중앙값', 'med') : `<tr><td class="empty">왼쪽에서 비교회사를 검색해 추가하세요.</td></tr>`;
+  $$('#tbl [data-on]').forEach(cb => cb.onchange = () => { const off = store.get('off', {}); if (cb.checked) delete off[cb.dataset.on]; else off[cb.dataset.on] = 1; store.set('off', off); render(); });
+  $('#tblNote').innerHTML = rows.length ? `기준일 ${esc(o.base)} · 기준주가 ${esc($('#pxMode').selectedOptions[0].text)} · 이익 ${esc($('#earnMode').selectedOptions[0].text)}. 시가총액 = 기준주가 × 상장주식수, EV = 시가총액 + 순차입금(차입금·사채${o.lease ? '·리스부채' : ''} − 현금성자산${o.stf ? '·단기금융상품' : ''}), EBITDA = 영업이익 + 감가상각비(현금흐름표). 포함 체크를 끄면 평균에서 빠집니다.` : '';
+  renderResult();
+  $('#xlsBtn').disabled = !rows.length;
+  store.set('peers', PEERS);
+}
+function renderResult(){
+  if (!LAST) return;
+  const m = METHOD, s = LAST.S[m];
+  const lbl = { per: '대상회사 지배주주순이익', ev: '대상회사 EBITDA', pbr: '대상회사 지배주주 자본', psr: '대상회사 매출액' }[m];
+  $('#tgtLbl').textContent = `${lbl}(억원)`;
+  $('#tgtNdWrap').hidden = m !== 'ev';
+  const app = $('#appMult').value === '' ? s.mean : +$('#appMult').value;
+  const earn = +$('#tgtEarn').value * 1e8, sh = +$('#tgtSh').value, nd = (+$('#tgtNd').value || 0) * 1e8;
+  const dLo = +$('#dLo').value / 100, dHi = +$('#dHi').value / 100;
+  let equity = null;
+  if (app && earn) equity = m === 'ev' ? app * earn - nd : app * earn;
+  const per = equity != null && sh ? equity / sh : null;
+  const hi = per ? floorTick(per * (1 - dLo)) : null, lo = per ? floorTick(per * (1 - dHi)) : null;
+  LAST.res = { m, app, earn, sh, nd, equity, per, lo, hi, dLo, dHi, s };
+  $('#res').innerHTML = `
+    <div class="kpi"><div class="k">비교회사 ${{ per: 'PER', ev: 'EV/EBITDA', pbr: 'PBR', psr: 'PSR' }[m]} (${s.n || 0}개)</div><div class="v">${mult(s.mean)}<small> 배 평균</small></div><div class="x">중앙값 ${mult(s.med)} · 범위 ${mult(s.min)}~${mult(s.max)}</div></div>
+    <div class="kpi"><div class="k">적용 배수</div><div class="v">${mult(app)}<small> 배</small></div></div>
+    <div class="kpi"><div class="k">평가 시가총액</div><div class="v">${equity == null ? '–' : fmt(equity / 1e8)}<small> 억원</small></div>${m === 'ev' && equity != null ? `<div class="x">EV ${fmt(app * earn / 1e8)}억 − 순차입금 ${fmt(nd / 1e8)}억</div>` : ''}</div>
+    <div class="kpi"><div class="k">주당 평가가액</div><div class="v">${fmt(per)}<small> 원</small></div></div>
+    <div class="kpi" style="grid-column:1/-1"><div class="k">희망공모가 밴드 (할인율 ${fmt(dHi * 100, 1)}% ~ ${fmt(dLo * 100, 1)}%)</div><div class="band">${lo == null ? '–' : `${fmt(lo)} ~ ${fmt(hi)}원`}</div>
+      ${lo && sh ? `<div class="x">공모 후 시가총액 ${fmt(lo * sh / 1e8)}억 ~ ${fmt(hi * sh / 1e8)}억 · 밴드 기준 PER(적용 이익 대비) ${earn ? `${fmt(lo * sh / earn, 2)}~${fmt(hi * sh / earn, 2)}배` : '–'}</div>` : ''}</div>`;
+  store.set('method', m);
+}
+$$('#methodTabs button').forEach(b => { b.classList.toggle('on', b.dataset.m === METHOD); b.onclick = () => { METHOD = b.dataset.m; $$('#methodTabs button').forEach(x => x.classList.toggle('on', x === b)); $('#appMult').value = ''; renderResult(); }; });
+$$('#units button').forEach(b => b.onclick = () => { UNIT = +b.dataset.u; $$('#units button').forEach(x => x.classList.toggle('on', x === b)); render(); });
+['#baseDate', '#pxMode', '#earnMode', '#evLease', '#evStf', '#exNeg', '#perMax', '#evMax'].forEach(s => $(s).addEventListener('change', render));
+['#appMult', '#tgtEarn', '#tgtSh', '#tgtNd', '#dLo', '#dHi'].forEach(s => $(s).addEventListener('input', () => { renderResult(); store.set('tgt', { e: $('#tgtEarn').value, s: $('#tgtSh').value, n: $('#tgtNd').value, lo: $('#dLo').value, hi: $('#dHi').value }); }));
+(() => { const t = store.get('tgt', null); if (t) { $('#tgtEarn').value = t.e || ''; $('#tgtSh').value = t.s || ''; $('#tgtNd').value = t.n || 0; $('#dLo').value = t.lo || 20; $('#dHi').value = t.hi || 35; } })();
+
+/* ---------- 비교회사 검색·추가 ---------- */
+const norm = s => String(s || '').toLowerCase().replace(/\s|\(주\)|㈜|주식회사/g, '');
+let SUG = [], SI = -1;
+function search(q){
+  q = norm(q); if (!q) return [];
+  const hit = [];
+  for (const c of COMP) {
+    const n = norm(c.name);
+    let sc = n === q ? 0 : n.startsWith(q) ? 1 : n.includes(q) ? 2 : c.code.startsWith(q) ? 3 : norm(c.sector).includes(q) ? 5 : norm(c.product).includes(q) ? 6 : -1;
+    if (sc >= 0) hit.push([sc, c]);
+    if (hit.length > 400) break;
+  }
+  return hit.sort((a, b) => a[0] - b[0]).slice(0, 30).map(x => x[1]);
+}
+function showSugg(){
+  const box = $('#sugg');
+  if (!SUG.length) { box.hidden = true; return; }
+  box.innerHTML = SUG.map((c, i) => `<div data-c="${esc(c.code)}" class="${i === SI ? 'act' : ''}"><b>${esc(c.name)}</b> <span class="x">${esc(c.code)} · ${esc(c.market)}</span><div class="s2">${esc(c.sector || '')}${c.product ? ' · ' + esc(c.product) : ''}</div></div>`).join('');
+  box.hidden = false;
+  $$('#sugg [data-c]').forEach(d => d.onmousedown = e => { e.preventDefault(); addPeer(d.dataset.c); });
+}
+$('#q').addEventListener('input', e => { SUG = search(e.target.value); SI = -1; showSugg(); });
+$('#q').addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { SI = Math.min(SUG.length - 1, SI + 1); showSugg(); e.preventDefault(); }
+  else if (e.key === 'ArrowUp') { SI = Math.max(0, SI - 1); showSugg(); e.preventDefault(); }
+  else if (e.key === 'Enter' && SUG.length) { addPeer(SUG[Math.max(0, SI)].code); }
+  else if (e.key === 'Escape') { SUG = []; showSugg(); }
+});
+$('#q').addEventListener('blur', () => setTimeout(() => { SUG = []; showSugg(); }, 150));
+async function addPeer(code){
+  if (!PEERS.includes(code)) PEERS.push(code);
+  $('#q').value = ''; SUG = []; showSugg();
+  renderChips(); await load(code); render();
+}
+function removePeer(code){ PEERS = PEERS.filter(c => c !== code); renderChips(); render(); }
+function renderChips(){
+  $('#chips').innerHTML = PEERS.map(c => `<span class="chip">${esc((BY[c] || {}).name || c)}<button data-x="${esc(c)}" title="빼기">×</button></span>`).join('');
+  $$('#chips [data-x]').forEach(b => b.onclick = () => removePeer(b.dataset.x));
+  $('#recBtn').disabled = !PEERS.length;
+}
+$('#clrBtn').onclick = () => { PEERS = []; renderChips(); render(); $('#rec').innerHTML = ''; };
+$('#recBtn').onclick = async () => {
+  const first = BY[PEERS[0]]; if (!first || !first.sector) { $('#rec').innerHTML = '<div class="note">첫 비교회사의 업종 정보가 없어요.</div>'; return; }
+  const cand = COMP.filter(c => c.sector === first.sector && !PEERS.includes(c.code));
+  $('#rec').innerHTML = `<div class="note">'${esc(first.sector)}' 업종 ${cand.length}개 — 눌러서 추가</div><div class="chips">${cand.slice(0, 60).map(c => `<span class="chip" style="cursor:pointer;padding-right:10px" data-a="${esc(c.code)}" title="${esc(c.product || '')}">${esc(c.name)} <span class="x">${esc(c.market)}</span></span>`).join('')}</div>`;
+  $$('#rec [data-a]').forEach(s => s.onclick = () => { addPeer(s.dataset.a); s.remove(); });
+};
+
+/* ---------- 엑셀 ---------- */
+function loadExcelJS(){ if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  return new Promise((ok, no) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js'; s.onload = () => ok(window.ExcelJS); s.onerror = () => no(new Error('엑셀 모듈 실패')); document.head.appendChild(s); }); }
+$('#xlsBtn').onclick = async () => {
+  const btn = $('#xlsBtn'), t0 = btn.textContent; btn.disabled = true; btn.textContent = '만드는 중…';
+  try {
+    const ExcelJS = await loadExcelJS(), wb = new ExcelJS.Workbook(), F = 'Malgun Gothic', NAVY = 'FF1F3A5F';
+    const { o, rows, S, res } = LAST;
+    const ws = wb.addWorksheet('비교회사', { views: [{ state: 'frozen', xSplit: 1, ySplit: 4, showGridLines: false }] });
+    const cols = [['회사', r => r.name, null, 18], ['종목코드', r => r.code, null, 9], ['시장', r => r.market, null, 8], ['포함', r => r.on ? 'O' : '제외', null, 6],
+      ['기준주가(원)', r => r.price ? Math.round(r.price) : null, '#,##0', 12], ['상장주식수(주)', r => r.shares, '#,##0', 14], ['시가총액(백만원)', r => r.mcap / 1e6, '#,##0', 14],
+      ['지배주주순이익(백만원)', r => r.ni / 1e6, '#,##0;[Red]-#,##0', 15], ['PER(배)', r => r.use.per ? r.per : null, '0.00', 9],
+      ['EBITDA(백만원)', r => r.ebitda / 1e6, '#,##0;[Red]-#,##0', 13], ['순차입금(백만원)', r => r.nd / 1e6, '#,##0;[Red]-#,##0', 13], ['EV(백만원)', r => r.ev / 1e6, '#,##0', 13], ['EV/EBITDA(배)', r => r.use.ev ? r.evx : null, '0.00', 11],
+      ['자본(지배)(백만원)', r => r.equity / 1e6, '#,##0;[Red]-#,##0', 14], ['PBR(배)', r => r.use.pbr ? r.pbr : null, '0.00', 9], ['매출액(백만원)', r => r.rev / 1e6, '#,##0', 13], ['PSR(배)', r => r.use.psr ? r.psr : null, '0.00', 9],
+      ['재무 기준', r => r.e ? `${r.e.label} (${r.e.fs})` : r.why.join(', '), null, 24], ['비고', r => Object.values(r.note).join(', ') || null, null, 18]];
+    ws.columns = cols.map(c => ({ width: c[3] }));
+    ws.mergeCells(1, 1, 1, 8); ws.getCell(1, 1).value = 'Peer 밸류에이션 · 비교회사 배수'; ws.getCell(1, 1).font = { name: F, size: 14, bold: true, color: { argb: NAVY } };
+    ws.mergeCells(2, 1, 2, 12); ws.getCell(2, 1).value = `기준일 ${o.base} · 기준주가 ${$('#pxMode').selectedOptions[0].text} · 이익 ${$('#earnMode').selectedOptions[0].text} · 출처 KRX·DART`; ws.getCell(2, 1).font = { name: F, size: 9, color: { argb: 'FF6B7280' } };
+    const hr = ws.getRow(4); hr.height = 30;
+    cols.forEach((c, i) => { const x = hr.getCell(i + 1); x.value = c[0]; x.font = { name: F, size: 10, bold: true, color: { argb: 'FFFFFFFF' } }; x.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } }; x.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; });
+    const put = (rIdx, vals, bold) => { const r = ws.getRow(rIdx); vals.forEach((v, i) => { const x = r.getCell(i + 1); x.value = v == null || (typeof v === 'number' && !isFinite(v)) ? null : v; x.font = { name: F, size: 10, bold: bold || i === 0 }; if (cols[i][2]) { x.numFmt = cols[i][2]; x.alignment = { horizontal: 'right' }; } x.border = { bottom: { style: 'thin', color: { argb: 'FFE3E7ED' } } }; }); };
+    rows.forEach((r, i) => put(5 + i, cols.map(c => { try { return c[1](r); } catch(e){ return null; } })));
+    const n = 5 + rows.length;
+    const statRow = (idx, lbl, k) => { const v = cols.map(() => null); v[0] = lbl; v[8] = S.per[k]; v[12] = S.ev[k]; v[14] = S.pbr[k]; v[16] = S.psr[k]; put(idx, v, true); ws.getRow(idx).eachCell(c => c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F4F8' } }); };
+    statRow(n, '평균', 'mean'); statRow(n + 1, '중앙값', 'med');
+    const w2 = wb.addWorksheet('공모가 산정', { views: [{ showGridLines: false }] });
+    w2.columns = [{ width: 30 }, { width: 22 }];
+    const mName = { per: 'PER', ev: 'EV/EBITDA', pbr: 'PBR', psr: 'PSR' }[res.m];
+    const lines = [['평가 방법', mName], ['비교회사 수', res.s.n], ['비교회사 평균 배수', res.s.mean], ['적용 배수', res.app],
+      [{ per: '대상회사 지배주주순이익(원)', ev: '대상회사 EBITDA(원)', pbr: '대상회사 지배주주 자본(원)', psr: '대상회사 매출액(원)' }[res.m], res.earn || null]];
+    if (res.m === 'ev') lines.push(['대상회사 순차입금(원)', res.nd]);
+    lines.push(['평가 시가총액(원)', res.equity], ['공모 후 발행주식수(주)', res.sh || null], ['주당 평가가액(원)', res.per ? Math.round(res.per) : null],
+      ['할인율', `${(res.dHi * 100).toFixed(1)}% ~ ${(res.dLo * 100).toFixed(1)}%`], ['희망공모가액 하단(원)', res.lo], ['희망공모가액 상단(원)', res.hi]);
+    w2.getCell('A1').value = 'Peer 밸류에이션 · 공모가 산정 요약'; w2.getCell('A1').font = { name: F, size: 14, bold: true, color: { argb: NAVY } };
+    lines.forEach((l, i) => { const r = w2.getRow(3 + i); r.getCell(1).value = l[0]; r.getCell(2).value = l[1] == null || (typeof l[1] === 'number' && !isFinite(l[1])) ? null : l[1];
+      r.getCell(1).font = { name: F, size: 10, bold: true }; r.getCell(2).font = { name: F, size: 10, bold: /희망/.test(l[0]) };
+      if (typeof l[1] === 'number') r.getCell(2).numFmt = /배수/.test(l[0]) ? '0.00"배"' : '#,##0'; r.getCell(2).alignment = { horizontal: 'right' };
+      [1, 2].forEach(c => r.getCell(c).border = { bottom: { style: 'thin', color: { argb: 'FFE3E7ED' } } }); });
+    const buf = await wb.xlsx.writeBuffer(); const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    a.download = `Peer_Valuation_${o.base}.xlsx`; document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(a.href); }, 4000);
+  } catch (e) { console.log(e); btn.textContent = '실패 – 다시 시도'; setTimeout(() => btn.textContent = t0, 3000); btn.disabled = false; return; }
+  btn.disabled = false; btn.textContent = t0;
+};
+
+/* ---------- 시작 ---------- */
+(async () => {
+  try {
+    const j = await getJSON('data/companies.json');
+    COMP = j.items; COMP.forEach(c => BY[c.code] = c); META = j;
+    const nPx = COMP.filter(c => c.px).length, nFin = COMP.filter(c => c.fin).length;
+    $('#upd').textContent = `마지막 업데이트 ${j.updated} (KST) · 시세 기준일 ${j.pxLast || '–'} · 종목 ${COMP.length.toLocaleString()}개`;
+    const w = [];
+    if (!nPx) w.push('아직 주가 데이터가 없어요. KRX Open API 키 승인 후 GitHub Secrets에 KRX_API_KEY를 넣으면 다음 업데이트부터 채워집니다.');
+    if (nFin < COMP.length * 0.8) w.push(`재무 데이터를 받는 중이에요(${nFin.toLocaleString()} / ${COMP.length.toLocaleString()}개). DART 하루 호출 한도 때문에 며칠에 나눠 채워집니다.`);
+    $('#warnBox').innerHTML = w.map(x => `<div class="warn">${esc(x)}</div>`).join('');
+    $('#baseDate').value = store.get('base', j.pxLast || new Date().toISOString().slice(0, 10));
+  } catch (e) {
+    $('#upd').textContent = '데이터를 아직 만들지 못했어요(첫 업데이트 전).';
+    $('#baseDate').value = new Date().toISOString().slice(0, 10);
+  }
+  $('#baseDate').addEventListener('change', () => store.set('base', $('#baseDate').value));
+  renderChips();
+  await Promise.all(PEERS.map(load));
+  render();
+})();
+</script>
+</body>
+</html>
