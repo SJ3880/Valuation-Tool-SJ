@@ -534,50 +534,173 @@ def parse_mix(xml):
 
 
 MIX_VER = 2
+BIZ_VER = 1
+BIZ_P = DATA / "biztxt.json"          # 사업보고서 '사업의 개요' 본문(모집단 자동 추천용, 화면에는 안 씀)
 
 
-def update_mix(companies, dart, meta):
-    """최근 사업보고서 본문을 한 번만 읽어 주요 제품 매출 비중 저장(1년에 한 번)"""
-    n = tried = 0
+def parse_biz(xml):
+    """사업보고서 'II. 사업의 내용'에서 사업의 개요 ~ 주요 제품 부분 글자만(숫자 빼고) 앞 5천자"""
+    m = re.search(r"<TITLE[^>]*>\s*(?:II|Ⅱ|2)\s*\.\s*사업의\s*내용", xml)
+    s = xml[m.start():] if m else xml
+    i = s.find("사업의 개요")
+    if i < 0:
+        i = s.find("사업의 내용")
+    if i < 0:
+        return None
+    seg = s[i: i + 150000]
+    ends = [e.start() for e in (re.search(r"<TITLE[^>]*>\s*(?:3|4|5)\s*\.\s*(?:원재료|생산|매출)", seg),
+                                re.search(r"<TITLE[^>]*>\s*(?:III|Ⅲ)\s*\.", seg)) if e]
+    if ends:
+        seg = seg[:min(ends)]
+    t = strip_tags(seg)
+    t = re.sub(r"[0-9][0-9,.\-%]*", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t[:5000] or None
+
+
+def load_biz():
     try:
-        for code in sorted(companies, key=lambda c: (companies[c]["market"] != "코스닥", c)):
-            if mins() > TIME_LIMIT_MIN or dart.left < 50:
-                break
-            fp = FIN / f"{code}.json"
-            if not fp.exists():
-                continue
+        return json.loads(BIZ_P.read_text("utf-8"))
+    except Exception:
+        return {}
+
+
+def update_mix(companies, dart, meta, biz):
+    """최근 사업보고서 본문을 한 번만 읽어 주요 제품 매출 비중 + 사업의 개요 저장(1년에 한 번)"""
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    lock = threading.Lock()
+    cnt = {"tried": 0, "mix": 0, "biz": 0}
+    jobs = []
+    for code in sorted(companies, key=lambda c: (c in biz, companies[c]["market"] != "코스닥", c)):   # 개요 없는 회사 먼저
+        fp = FIN / f"{code}.json"
+        if not fp.exists():
+            continue
+        try:
             fin = json.loads(fp.read_text("utf-8"))
-            fys = sorted((k for k, v in fin.get("r", {}).items() if k.endswith("FY") and v and v.get("rcept")), reverse=True)
-            if not fys:
-                continue
-            rc = fin["r"][fys[0]]["rcept"]
-            m = meta.setdefault(code, {})
-            if (m.get("mix") or {}).get("rcept") == rc and (m.get("mix") or {}).get("v") == MIX_VER:
-                continue
-            tried += 1
-            try:
-                r = requests.get(f"{DART_API}/document.xml", params={"crtfc_key": DART_KEY, "rcept_no": rc}, timeout=120)
+        except Exception:
+            continue
+        fys = sorted((k for k, v in fin.get("r", {}).items() if k.endswith("FY") and v and v.get("rcept")), reverse=True)
+        if not fys:
+            continue
+        rc = fin["r"][fys[0]]["rcept"]
+        mm = meta.get(code) or {}
+        mix_ok = (mm.get("mix") or {}).get("rcept") == rc and (mm.get("mix") or {}).get("v") == MIX_VER
+        biz_ok = (biz.get(code) or {}).get("rc") == rc and (biz.get(code) or {}).get("v") == BIZ_VER
+        if not (mix_ok and biz_ok):
+            jobs.append((code, rc, fys[0][:4]))
+
+    def one(job):
+        code, rc, yr = job
+        if mins() > TIME_LIMIT_MIN or dart.left < 50:
+            return
+        try:
+            r = requests.get(f"{DART_API}/document.xml", params={"crtfc_key": DART_KEY, "rcept_no": rc}, timeout=120)
+            with dart.lock:
                 dart.left -= 1
                 dart.calls += 1
+            try:
                 z = zipfile.ZipFile(io.BytesIO(r.content))
-                main = max(z.namelist(), key=lambda nm: z.getinfo(nm).file_size)
-                raw = z.read(main)
-                xml = raw.decode("utf-8", errors="ignore")
-                if "주요" not in xml:
-                    xml = raw.decode("euc-kr", errors="ignore")
-                mix = parse_mix(xml)
             except zipfile.BadZipFile:
-                mix = None
-            except Exception as e:
-                log(f"  - {code} 매출비중 실패: {e}")
-                continue
-            m["mix"] = {"rcept": rc, "year": fys[0][:4], "items": mix, "v": MIX_VER}
-            if mix:
-                n += 1
-            time.sleep(0.1)
-    except StopIteration as e:
-        log(f"[매출비중] {e}")
-    log(f"[매출비중] 사업보고서 {tried}건 확인 · 표 읽음 {n}건")
+                if b'"020"' in r.content[:300]:
+                    dart.left = 0
+                    return
+                with lock:
+                    meta.setdefault(code, {})["mix"] = {"rcept": rc, "year": yr, "items": None, "v": MIX_VER}
+                    biz[code] = {"rc": rc, "v": BIZ_VER, "t": None}
+                return
+            main = max(z.namelist(), key=lambda nm: z.getinfo(nm).file_size)
+            raw = z.read(main)
+            xml = raw.decode("utf-8", errors="ignore")
+            if "사업" not in xml:
+                xml = raw.decode("euc-kr", errors="ignore")
+            mix, txt = parse_mix(xml), parse_biz(xml)
+        except Exception as e:
+            log(f"  - {code} 사업보고서 실패: {e}")
+            return
+        with lock:
+            meta.setdefault(code, {})["mix"] = {"rcept": rc, "year": yr, "items": mix, "v": MIX_VER}
+            biz[code] = {"rc": rc, "v": BIZ_VER, "t": txt}
+            cnt["tried"] += 1
+            cnt["mix"] += bool(mix)
+            cnt["biz"] += bool(txt)
+
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        list(ex.map(one, jobs))
+    log(f"[사업보고서] 대상 {len(jobs)}건 중 {cnt['tried']}건 읽음 · 매출비중 표 {cnt['mix']}건 · 사업의 개요 {cnt['biz']}건")
+
+
+# ---------------------------------------------------------------- 5-1) 모집단 자동 추천용 색인
+JOSA = sorted("하였습니다 했습니다 합니다 됩니다 입니다 하였으며 하였고 하며 되며 되고 이다 하였다 했다 으로부터 로부터 이라는 라는 에는 와의 과의 에서는 으로는 에서도 으로서 으로써 에서 으로 에게 까지 부터 이며 이고 하는 하여 하고 한다 된다 되는 되어 적인 적으로 들의 들은 들이 들을 은 는 을 를 의 에 와 과 용 및 등".split(), key=len, reverse=True)
+STOP = set("당사 회사 동사 사업 제품 서비스 기타 주요 관련 국내 해외 시장 매출 분야 부문 업체 기업 통해 위해 대한 있는 있습니다 합니다 하였습니다 있으며 경우 이상 이하 현재 당기 전기 기준 사용 제공 생산 판매 개발 제조".split())
+
+
+def tokens(text):
+    """한글은 2글자씩 끊은 조각 + 3~6글자 낱말, 영문·숫자 섞인 말은 낱말 그대로 (화면 쪽 tokens()와 똑같이)"""
+    out = []
+    for w in re.findall(r"[가-힣]+|[a-z0-9]+", (text or "").lower()):
+        if not re.search(r"[가-힣]", w):
+            if len(w) >= 2 and not w.isdigit():
+                out.append(w)
+            continue
+        h = w
+        for j in JOSA:
+            if h.endswith(j) and len(h) - len(j) >= 2:
+                h = h[: -len(j)]
+                break
+        if len(h) < 2 or h in STOP:
+            continue
+        if 3 <= len(h) <= 6:
+            out += [h, h]                      # 낱말 전체가 맞으면 조각보다 2배
+        for k in range(len(h) - 1):
+            out.append(h[k: k + 2])
+    return out
+
+
+def ksic_names():
+    try:
+        return json.loads((DATA / "ksic.json").read_text("utf-8"))
+    except Exception:
+        return {}
+
+
+def ksic_chain(code, names):
+    """C26299 → 대분류 밑 중·소·세·세세분류 이름들"""
+    code = (code or "").lstrip("C")
+    return [names[code[:k]] for k in range(2, len(code) + 1) if code[:k] in names]
+
+
+def build_biz_index(items, biz):
+    """회사마다 업종·주요제품·매출비중 품목·사업의 개요로 낱말 점수표(TF-IDF) → data/biz.json"""
+    import math
+    from collections import Counter
+    names = ksic_names()
+    docs = {}
+    for c in items:
+        parts = [(c.get("product") or "") + " ", (c.get("sector") or "")] * 3          # 짧지만 정확한 말은 무게를 더
+        parts += [" ".join(ksic_chain(c.get("ksic"), names))] * 2
+        parts += [" ".join(m["n"] for m in (c.get("mix") or []))] * 2
+        parts.append((biz.get(c["code"]) or {}).get("t") or "")
+        tf = Counter(tokens(" ".join(parts)))
+        if tf:
+            docs[c["code"]] = tf
+    N = len(docs)
+    df = Counter()
+    for tf in docs.values():
+        df.update(tf.keys())
+    idf = {t: math.log((N + 1) / (n + 0.5)) for t, n in df.items() if 1 < n <= N * 0.3}   # 한 회사만 쓰는 말·너무 흔한 말은 뺌
+    out, used = {}, set()
+    for code, tf in docs.items():
+        w = {t: (1 + math.log(n)) * idf[t] for t, n in tf.items() if t in idf}
+        top = sorted(w.items(), key=lambda x: -x[1])[:80]
+        nrm = math.sqrt(sum(v * v for _, v in top)) or 1
+        out[code] = [[t, round(v / nrm, 3)] for t, v in top if v / nrm >= 0.01]
+        used.update(t for t, _ in out[code])
+    (DATA / "biz.json").write_text(json.dumps({"v": 1, "updated": TODAY.isoformat(), "n": N,
+                                               "withText": sum(1 for x in biz.values() if x.get("t")),
+                                               "idf": {t: round(idf[t], 2) for t in sorted(used)}, "docs": out},
+                                              ensure_ascii=False, separators=(",", ":")), "utf-8")
+    log(f"[추천 색인] 회사 {len(out)}개 · 낱말 {len(used)}개 · 사업의 개요 반영 {sum(1 for x in biz.values() if x.get('t'))}개")
 
 
 # ---------------------------------------------------------------- 6) 공모 할인율(IPO 동향 사이트 데이터)
@@ -656,11 +779,13 @@ def main():
                 fn(companies, ccorp, dart, meta)
             except Exception as e:
                 log(f"[메타] 실패: {e}")
+        biz = load_biz()
         try:
-            update_mix(companies, dart, meta)
+            update_mix(companies, dart, meta, biz)
         except Exception as e:
-            log(f"[매출비중] 실패: {e}")
+            log(f"[사업보고서] 실패: {e}")
         META_P.write_text(json.dumps(meta, ensure_ascii=False, separators=(",", ":")), "utf-8")
+        BIZ_P.write_text(json.dumps(biz, ensure_ascii=False, separators=(",", ":")), "utf-8")
     try:
         ipo_discounts()
     except Exception as e:
@@ -687,6 +812,10 @@ def main():
         pass
     comp_p.write_text(json.dumps({"updated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"), "pxLast": st.get("last"),
                                   "items": items}, ensure_ascii=False, separators=(",", ":")), "utf-8")
+    try:
+        build_biz_index(items, load_biz())
+    except Exception as e:
+        log(f"[추천 색인] 실패: {e}")
     log(f"[저장] 회사 {len(items)}개 · 주가 {sum(c['px'] for c in items)}개 · 재무 {sum(c['fin'] for c in items)}개 · {mins():.0f}분")
 
 

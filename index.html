@@ -63,7 +63,7 @@ th{background:var(--panel2);font-weight:600;font-size:12px;color:var(--mu);posit
 th.l,td.l{text-align:left} th.c,td.c{text-align:center}
 td.nm{font-weight:700;position:sticky;left:0;background:var(--panel);z-index:1}
 th.nm{position:sticky;left:0;z-index:3}
-td.wrap{white-space:normal;min-width:180px;max-width:320px}
+td.wrap{white-space:normal;min-width:180px;max-width:320px;padding:6px 8px;margin:0}
 tr.dim td{opacity:.45} tr.dim td.nm{opacity:1;color:var(--mu)}
 tr.avg td{font-weight:700;background:var(--panel2)}
 .x{color:var(--mu);font-size:11px;font-weight:400}
@@ -81,6 +81,16 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
 :root[data-theme="dark"] .warn{background:#2a2110;color:#e8c27a;border-color:#4d3b17}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .warn{background:#2a2110;color:#e8c27a;border-color:#4d3b17}}
 .empty{padding:30px 10px;text-align:center;color:var(--mu)}
+.kw{cursor:pointer;user-select:none;padding:3px 10px}
+.kw.boost{background:var(--accent);color:#fff}
+.kw.off{text-decoration:line-through;opacity:.45}
+.kw .w{font-size:10px;opacity:.7}
+.bar{display:inline-block;height:8px;border-radius:4px;background:var(--accent);vertical-align:middle;margin-right:6px}
+.recgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin-top:12px}
+.rechead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:4px 0 6px}
+.rechead h3{font-size:14px;margin:0}
+.rowbtns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.installTip{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:10px;font-size:13px;line-height:1.7}
 .crit{display:grid;grid-template-columns:40px 1fr 1.4fr 32px;gap:6px;align-items:center;margin:6px 0}
 .pane{display:none} .pane.on{display:block}
 .rsum{line-height:1.8;font-size:13px}
@@ -97,6 +107,7 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
       <div class="sub" id="upd">데이터 불러오는 중…</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn" id="installBtn" title="휴대폰·PC에 앱으로 설치">📲 앱으로 설치</button>
       <button class="btn" id="saveBtn" title="지금 작업을 파일로 저장(나중에 불러오기)">💾 작업 저장</button>
       <button class="btn" id="loadBtn" title="저장한 작업 파일 불러오기">📂 불러오기</button><input type="file" id="loadFile" accept=".json" hidden>
       <button class="btn" id="newBtn">새로 시작</button>
@@ -104,6 +115,7 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
       <div class="seg" id="themeSeg"><button data-t="auto">자동</button><button data-t="light">☀ 밝게</button><button data-t="dark">🌙 어둡게</button></div>
     </div>
   </div>
+  <div class="installTip" id="installTip" hidden></div>
   <div id="warnBox"></div>
 
   <div class="card">
@@ -136,7 +148,20 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
   <!-- ① 모집단 -->
   <div class="pane" id="p-pop">
     <div class="card">
-      <h2>① 모집단 선정 — 업종 유사성</h2>
+      <h2>① 모집단 선정 — 회사 설명으로 자동 추천</h2>
+      <div class="note" style="margin-top:0">대상회사가 <b>어떤 사업을 하는지</b> 적거나 <b>IR자료·회사소개서</b>(PDF·PPT·워드)를 올리면, 전 상장사의 업종·주요제품·매출비중 품목·사업보고서 '사업의 개요'와 비교해 사업이 비슷한 회사와 업종(한국표준산업분류)을 뽑아줍니다.</div>
+      <label class="f" style="margin-top:10px">대상회사 사업 설명</label>
+      <textarea id="desc" rows="6" placeholder="예: 방산·위성통신용 RF 부품을 개발·생산. 주력은 레이더용 TMMR(송수신 모듈), 위성 탑재 RF 부품. 주요 고객은 LIG넥스원, 한화시스템…"></textarea>
+      <div class="rowbtns">
+        <label class="btn" for="descFile">📎 IR자료·회사소개서 올리기</label><input type="file" id="descFile" accept=".pdf,.pptx,.docx,.txt,.md" multiple hidden>
+        <button class="btn pri" id="recBtn">🔍 모집단 추천 받기</button>
+        <button class="btn sm" id="descClear">설명 지우기</button>
+        <span class="x" id="fileMsg"></span>
+      </div>
+      <div id="recBox"></div>
+    </div>
+    <div class="card">
+      <h2>모집단 직접 조정 <span class="x">추천 결과에 업종·회사를 더하거나 빼기</span></h2>
       <div class="form">
         <div class="search" style="grid-column:span 2"><label class="f">업종(한국표준산업분류) 검색해서 추가</label>
           <input type="text" id="secQ" placeholder="표준산업분류 코드(예: C26299) 또는 업종명(예: 통신 및 방송 장비)" autocomplete="off"><div class="sugg" id="secSugg" hidden></div></div>
@@ -162,7 +187,8 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
       <div id="crits"></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
         <button class="btn sm" id="addCrit">+ 기준 추가</button>
-        <button class="btn sm" id="autoCrit" title="각 기준의 키워드가 주요제품·매출비중·업종에 들어 있으면 O로 표시(기존 표시는 유지)">키워드로 자동 체크</button>
+        <button class="btn sm" id="kwCrit" title="① 추천에서 뽑은 핵심 키워드로 기준을 만들어요">① 핵심 키워드로 기준 만들기</button>
+        <button class="btn sm" id="autoCrit" title="각 기준의 키워드가 주요제품·매출비중·업종·사업보고서 핵심어에 들어 있으면 O로 표시(기존 표시는 유지)">키워드로 자동 체크</button>
         <button class="btn sm" id="clearCrit">체크 모두 지우기</button>
       </div>
       <label class="f" style="margin-top:10px">사업 유사성 기준 설명(엑셀 'Peer 선정 과정'에 들어감)</label>
@@ -265,6 +291,7 @@ $('#tTrack').innerHTML = TRACKS.map(t => `<option>${t}</option>`).join('');
 /* ---------------- 상태 ---------------- */
 const DEF = () => ({ tName: '', baseDate: '', tMkt: '코스닥', tTrack: '일반', method: 'per', pxMode: 'min3', earnMode: 'ltm', unit: '1e6',
   sectors: [], mKospi: true, mKosdaq: true, adds: [], drops: [],
+  desc: '', kwAdj: {}, kwPlus: [], recLv: 4, recN: 20, recTop: 40, recSecSel: null, recCoSel: null, recAdds: [], recAt: '', recKw: [],
   crits: [{ label: '', kw: '' }], marks: {}, area: {}, bizNote: '',
   fOp: true, fNi: true, fEb: false, fRev: false, fRevMin: 0,
   nAdmin: true, nList: true, nListM: 6, nAudit: true, nFye: true, nMult: true, nMin: 10, nMax: 50, risk: {}, ov: {},
@@ -272,7 +299,7 @@ const DEF = () => ({ tName: '', baseDate: '', tMkt: '코스닥', tTrack: '일반
   appMult: '', tEarn: '', tNd: 0, tSh: '', step: 'pop' });
 let ST = Object.assign(DEF(), LS.get('state', {}));
 const save = () => LS.set('state', ST);
-let COMP = [], BY = {}, META = {}, DISC = [], CACHE = {}, SECTORS = [];
+let COMP = [], BY = {}, META = {}, DISC = [], CACHE = {}, SECTORS = [], BIZ = null, KS = {}, REC = null, SIM = {};
 
 /* ---------------- 숫자 ---------------- */
 const U = () => +ST.unit, UL = () => ST.unit === '1e8' ? '억원' : '백만원';
@@ -353,9 +380,17 @@ function earnings(fin, base){
 }
 
 /* ---------------- 회사별 계산 ---------------- */
-const secKey = s => s.startsWith('ksic:') || s.startsWith('kind:') ? s : 'kind:' + s;
-const secLabel = s => { s = secKey(s); if (s.startsWith('ksic:')) { const k = s.slice(5), x = SECTORS.find(z => z.key === s); return `C${k}${x && x.parent ? ` (${x.parent})` : ''}`; } return s.slice(5); };
-function inSectors(c){ return ST.sectors.some(s => { s = secKey(s); return s.startsWith('ksic:') ? c.ksic === s.slice(5) : c.sector === s.slice(5); }); }
+const secKey = s => /^(ksic|ksicp|kind):/.test(s) ? s : 'kind:' + s;
+const ksName = k => KS[k] || '';
+function secMatch(c, s){ s = secKey(s);
+  if (s.startsWith('ksicp:')) { const k = s.slice(6), ck = c.ksic || ''; return !!ck && (ck.startsWith(k) || (ck.length >= 3 && k.startsWith(ck))); }   // 하위 분류 포함(더 넓게 분류된 회사도)
+  if (s.startsWith('ksic:')) return c.ksic === s.slice(5);
+  return c.sector === s.slice(5); }
+const secLabel = s => { s = secKey(s);
+  if (s.startsWith('ksicp:')) { const k = s.slice(6); return `C${k} ${ksName(k)}`; }
+  if (s.startsWith('ksic:')) { const k = s.slice(5), x = SECTORS.find(z => z.key === s); return `C${k} ${ksName(k) || (x && x.parent) || ''}`; }
+  return s.slice(5); };
+function inSectors(c){ return ST.sectors.some(s => secMatch(c, s)); }
 function popCodes(){
   const out = COMP.filter(c => inSectors(c) && ((c.market === '코스피' && ST.mKospi) || (c.market === '코스닥' && ST.mKosdaq))).map(c => c.code);
   for (const a of ST.adds) if (!out.includes(a)) out.push(a);
@@ -408,24 +443,24 @@ function calc(code){
   return r;
 }
 let ROWS = [];
-function compute(){ ROWS = popCodes().map(calc); return ROWS; }
+function compute(){ ROWS = popCodes().map(calc); if (REC) ROWS.sort((a, b) => (SIM[b.code] || 0) - (SIM[a.code] || 0)); return ROWS; }
 const stat = arr => { const v = arr.filter(x => x != null && isFinite(x)).sort((a, b) => a - b); if (!v.length) return {}; const mean = v.reduce((s, x) => s + x, 0) / v.length; return { n: v.length, mean, med: v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2, min: v[0], max: v[v.length - 1] }; };
 const MN = { per: 'PER', psr: 'PSR', ev: 'EV/EBITDA', pbr: 'PBR' };
 const mixTxt = c => (c.mix || []).map(m => `${m.n}(${m.p}%)`).join(', ');
 
 /* ---------------- 렌더: ① 모집단 ---------------- */
 function renderPop(){
-  $('#secChips').innerHTML = ST.sectors.map(s => { const k = secKey(s); const n = COMP.filter(c => k.startsWith('ksic:') ? c.ksic === k.slice(5) : c.sector === k.slice(5)).length;
-    return `<span class="chip">${k.startsWith('ksic:') ? '' : '<span class="x">KIND 업종</span> '}${esc(secLabel(s))} <span class="x">${n}개</span><button data-x="${esc(s)}">×</button></span>`; }).join('');
+  $('#secChips').innerHTML = ST.sectors.map(s => { const k = secKey(s); const n = COMP.filter(c => secMatch(c, k)).length;
+    return `<span class="chip">${k.startsWith('kind:') ? '<span class="x">KIND 업종</span> ' : ''}${esc(secLabel(s))}${k.startsWith('ksicp:') ? ' <span class="x">(하위 포함)</span>' : ''} <span class="x">${n}개</span><button data-x="${esc(s)}">×</button></span>`; }).join('');
   $$('#secChips [data-x]').forEach(b => b.onclick = () => { ST.sectors = ST.sectors.filter(s => s !== b.dataset.x); save(); refresh(); });
-  $('#addChips').innerHTML = ST.adds.map(a => `<span class="chip">+ ${esc((BY[a] || {}).name || a)}<button data-x="${esc(a)}">×</button></span>`).join('') +
+  $('#addChips').innerHTML = ST.adds.map(a => `<span class="chip">+ ${esc((BY[a] || {}).name || a)}${ST.recAdds.includes(a) ? ' <span class="x">추천</span>' : ''}<button data-x="${esc(a)}">×</button></span>`).join('') +
     ST.drops.map(a => `<span class="chip" style="text-decoration:line-through">${esc((BY[a] || {}).name || a)}<button data-u="${esc(a)}" title="다시 넣기">↺</button></span>`).join('');
   $$('#addChips [data-x]').forEach(b => b.onclick = () => { ST.adds = ST.adds.filter(s => s !== b.dataset.x); save(); refresh(); });
   $$('#addChips [data-u]').forEach(b => b.onclick = () => { ST.drops = ST.drops.filter(s => s !== b.dataset.u); save(); refresh(); });
   const kp = ROWS.filter(r => r.market === '코스피').length, kq = ROWS.filter(r => r.market === '코스닥').length;
-  $('#popSum').innerHTML = ROWS.length ? `<b>코스피 ${kp}개사, 코스닥 ${kq}개사로 총 ${ROWS.length}개사</b>` : '업종을 검색해서 모집단을 만드세요.';
-  $('#popTbl').innerHTML = ROWS.length ? `<tr><th class="l nm">회사</th><th class="l">시장</th><th class="l">업종</th><th class="l">주요제품(KIND)</th><th>상장일</th><th>결산월</th><th class="l">데이터</th><th></th></tr>` +
-    ROWS.map(r => `<tr><td class="l nm">${esc(r.name)}<div class="x">${esc(r.code)}</div></td><td class="l">${esc(r.market)}</td><td class="l small">${esc(r.c.sector || '')}</td><td class="l wrap small">${esc(r.c.product || '')}</td>
+  $('#popSum').innerHTML = ROWS.length ? `<b>코스피 ${kp}개사, 코스닥 ${kq}개사로 총 ${ROWS.length}개사</b>` : '위에서 회사 설명으로 추천을 받거나, 업종을 검색해서 모집단을 만드세요.';
+  $('#popTbl').innerHTML = ROWS.length ? `<tr><th class="l nm">회사</th><th class="l">시장</th>${REC ? '<th>사업 유사도</th>' : ''}<th class="l">업종</th><th class="l">주요제품(KIND)</th><th>상장일</th><th>결산월</th><th class="l">데이터</th><th></th></tr>` +
+    ROWS.map(r => `<tr><td class="l nm">${esc(r.name)}<div class="x">${esc(r.code)}</div></td><td class="l">${esc(r.market)}</td>${REC ? `<td>${simCell(r.code)}</td>` : ''}<td class="l small">${r.c.ksic ? `C${esc(r.c.ksic)} ` : ''}${esc(ksName(r.c.ksic) || r.c.sector || '')}</td><td class="l wrap small">${esc(r.c.product || '')}</td>
       <td>${esc(r.c.listed || '')}</td><td>${esc(r.c.fye || '')}</td><td class="l small">${r.c.px ? '' : '<span class="neg">주가 없음</span> '}${r.c.fin ? '' : '<span class="neg">재무 없음</span>'}</td>
       <td><button class="btn sm" data-drop="${esc(r.code)}">빼기</button></td></tr>`).join('') : '';
   $$('#popTbl [data-drop]').forEach(b => b.onclick = () => { ST.drops.push(b.dataset.drop); ST.adds = ST.adds.filter(a => a !== b.dataset.drop); save(); refresh(); });
@@ -442,8 +477,8 @@ function renderBiz(){
 }
 function renderBizTable(){
   const rows = ROWS;
-  $('#bizTbl').innerHTML = rows.length ? `<tr><th class="l nm">회사</th><th class="l">시장</th><th class="l">주요제품(KIND)</th><th class="l">매출 비중(사업보고서)</th>${ST.crits.map((c, i) => `<th class="c">${i + 1}) ${esc(c.label || '기준')}</th>`).join('')}<th class="c">사업유사성</th><th class="l">관련 사업 영역(R)</th></tr>` +
-    rows.map(r => `<tr class="${r.biz ? '' : ''}"><td class="l nm">${esc(r.name)}<div class="x">${esc(r.code)}</div></td><td class="l">${esc(r.market)}</td>
+  $('#bizTbl').innerHTML = rows.length ? `<tr><th class="l nm">회사</th><th class="l">시장</th>${REC ? '<th>사업 유사도</th>' : ''}<th class="l">주요제품(KIND)</th><th class="l">매출 비중(사업보고서)</th>${ST.crits.map((c, i) => `<th class="c">${i + 1}) ${esc(c.label || '기준')}</th>`).join('')}<th class="c">사업유사성</th><th class="l">관련 사업 영역(R)</th></tr>` +
+    rows.map(r => `<tr class="${r.biz ? '' : ''}"><td class="l nm">${esc(r.name)}<div class="x">${esc(r.code)}</div></td><td class="l">${esc(r.market)}</td>${REC ? `<td>${simCell(r.code)}</td>` : ''}
       <td class="l wrap small">${esc(r.c.product || '')}</td><td class="l wrap small">${esc(mixTxt(r.c)) || '<span class="mu">–</span>'}${r.c.mixYear ? ` <span class="x">${esc(r.c.mixYear)}</span>` : ''}</td>
       ${r.crit.map((b, i) => `<td class="c"><button class="ox ${b ? 'o' : 'x'}" data-mk="${esc(r.code)}" data-i="${i}">${b ? 'O' : 'X'}</button></td>`).join('')}
       <td class="c">${OX(r.biz)}</td><td class="l"><input type="text" data-ar="${esc(r.code)}" value="${esc(ST.area[r.code] || '')}" placeholder="${esc((r.c.product || '').split(',')[0])}" style="min-width:150px"></td></tr>`).join('') : '<tr><td class="empty">먼저 ① 모집단을 만드세요.</td></tr>';
@@ -547,7 +582,7 @@ function renderR(){
       ${r.crit.map(b => `<td class="c">${OX(b)}</td>`).join('')}<td class="c">${OX(r.fin)}</td><td class="c">${r.fin === true ? OX(r.nf) : ''}</td><td>${r.fin === true ? mx(r.mult) : ''}</td><td class="l">${esc(r.reason)}</td><td>${i === 0 && F.length ? mx(appliedMult()) : r.final ? '' : ''}</td></tr>`).join('') : '<tr><td class="empty">아직 1차 충족 회사가 없어요.</td></tr>';
   const pop = ROWS, kp = pop.filter(r => r.market === '코스피').length;
   const lines = [];
-  lines.push(`<b>모집단</b>: ${ST.sectors.map(s => esc(secLabel(s))).join(', ') || '–'} — 코스피 ${kp}개사, 코스닥 ${pop.length - kp}개사로 총 ${pop.length}개사`);
+  lines.push(`<b>모집단</b>: ${ST.sectors.map(s => esc(secLabel(s))).join(', ') || '–'}${ST.adds.length ? ` + 개별 추가 ${ST.adds.length}개사` : ''} — 코스피 ${kp}개사, 코스닥 ${pop.length - kp}개사로 총 ${pop.length}개사`);
   lines.push(`<b>1차(사업유사성) 충족 회사: ${rows.length}개사</b>(아래 사업 중 1개 이상 충족)`);
   ST.crits.forEach((c, i) => { const hit = rows.filter(r => r.crit[i]); lines.push(`&nbsp;&nbsp;${i + 1}) ${esc(c.label || '기준')}: ${hit.length}개사${hit.length && hit.length <= 8 ? `(${hit.map(r => esc(r.name)).join(', ')})` : ''}`); });
   const f2 = rows.filter(r => r.fin === true);
@@ -601,7 +636,8 @@ $('#clearCrit').onclick = () => { if (confirm('1차 O/X 표시를 모두 지울�
 $('#autoCrit').onclick = () => {
   let n = 0;
   for (const r of ROWS) {
-    const txt = norm([r.c.product, r.c.sector, mixTxt(r.c), ST.area[r.code]].join(' '));
+    const terms = BIZ && BIZ.docs[r.code] ? BIZ.docs[r.code].map(x => x[0]).join(' ') : '';
+    const txt = norm([r.c.product, r.c.sector, ksName(r.c.ksic), mixTxt(r.c), ST.area[r.code], terms].join(' '));
     ST.crits.forEach((c, i) => { const kws = (c.kw || '').split(',').map(norm).filter(Boolean);
       if (kws.some(k => txt.includes(k))) { const m = ST.marks[r.code] = ST.marks[r.code] || {}; if (!m[i]) { m[i] = true; n++; } } });
   }
@@ -626,6 +662,186 @@ suggest($('#secQ'), $('#secSugg'), q => { const qq = norm(q).replace(/^c(?=\d)/,
 suggest($('#coQ'), $('#coSugg'), q => { q = norm(q); if (!q) return []; const h = []; for (const c of COMP) { const n = norm(c.name); const sc = n === q ? 0 : n.startsWith(q) ? 1 : n.includes(q) ? 2 : c.code.startsWith(q) ? 3 : -1; if (sc >= 0) h.push([sc, c]); }
   return h.sort((a, b) => a[0] - b[0]).slice(0, 25).map(([, c]) => ({ v: c.code, html: `<b>${esc(c.name)}</b> <span class="x">${esc(c.code)} · ${esc(c.market)} · ${esc(c.sector || '')}</span>` })); },
   x => { if (!ST.adds.includes(x.v)) ST.adds.push(x.v); ST.drops = ST.drops.filter(d => d !== x.v); save(); refresh(); });
+
+/* ---------------- ① 모집단 자동 추천 ----------------
+   회사 설명 → 낱말 조각(한글 2글자씩 + 3~6글자 낱말, 영문 낱말) → 사업보고서·주요제품 색인(TF-IDF)과 코사인 유사도.
+   tokens()는 scripts/update.py 의 tokens()와 똑같이 맞춰야 함 */
+const JOSA = '하였습니다 했습니다 합니다 됩니다 입니다 하였으며 하였고 하며 되며 되고 이다 하였다 했다 으로부터 로부터 이라는 라는 에는 와의 과의 에서는 으로는 에서도 으로서 으로써 에서 으로 에게 까지 부터 이며 이고 하는 하여 하고 한다 된다 되는 되어 적인 적으로 들의 들은 들이 들을 은 는 을 를 의 에 와 과 용 및 등'.split(' ').sort((a, b) => b.length - a.length);
+const STOPW = new Set('당사 회사 동사 사업 제품 서비스 기타 주요 관련 국내 해외 시장 매출 분야 부문 업체 기업 통해 위해 대한 있는 있습니다 합니다 하였습니다 있으며 경우 이상 이하 현재 당기 전기 기준 사용 제공 생산 판매 개발 제조'.split(' '));
+function stem(w){ for (const j of JOSA) if (w.endsWith(j) && w.length - j.length >= 2) return w.slice(0, -j.length); return w; }
+function words(text){ const out = []; for (const w of (String(text || '').replace(/^\[[^\]\n]*\]$/gm, ' ').toLowerCase().match(/[가-힣]+|[a-z0-9]+/g) || [])) {
+    if (!/[가-힣]/.test(w)) { if (w.length >= 2 && !/^\d+$/.test(w)) out.push(w); continue; }
+    const h = stem(w); if (h.length >= 2 && !STOPW.has(h)) out.push(h); } return out; }
+function tokens(text){ const out = []; for (const h of words(text)) {
+    if (!/[가-힣]/.test(h)) { out.push(h); continue; }
+    if (h.length >= 3 && h.length <= 6) out.push(h, h);
+    for (let k = 0; k < h.length - 1; k++) out.push(h.slice(k, k + 2)); } return out; }
+const piecesOf = w => /[가-힣]/.test(w) ? [w, ...Array.from({ length: w.length - 1 }, (_, k) => w.slice(k, k + 2))] : [w];
+function queryVec(){
+  const tf = {}; tokens(ST.desc).forEach(t => { if (BIZ.idf[t]) tf[t] = (tf[t] || 0) + 1; });
+  const w = {}; for (const [t, n] of Object.entries(tf)) w[t] = (1 + Math.log(n)) * BIZ.idf[t];
+  for (const k of ST.kwPlus) for (const t of piecesOf(stem(k.toLowerCase().replace(/\s/g, '')))) if (BIZ.idf[t]) w[t] = (w[t] || 0) + BIZ.idf[t] * 2;
+  for (const [word, v] of Object.entries(ST.kwAdj)) for (const t of piecesOf(word)) if (w[t] != null) { if (v === 0) delete w[t]; else w[t] *= v; }
+  const nr = Math.sqrt(Object.values(w).reduce((s, x) => s + x * x, 0)) || 1;
+  for (const t in w) w[t] /= nr;
+  return w;
+}
+function queryWords(){   // 화면에 보여줄 핵심 키워드(낱말 단위)
+  const cnt = {}; words(ST.desc).forEach(h => cnt[h] = (cnt[h] || 0) + 1);
+  return Object.entries(cnt).map(([h, n]) => { const id = BIZ.idf[h] ?? (h.length === 2 ? null : Math.max(0, ...piecesOf(h).slice(1).map(t => BIZ.idf[t] || 0)));
+      return id ? { w: h, s: (1 + Math.log(n)) * id } : null; })
+    .filter(Boolean).sort((a, b) => b.s - a.s).slice(0, 24);
+}
+const lvKey = (k, L) => k && k.length > L ? k.slice(0, L) : k;
+function runRec(fresh){
+  if (!BIZ) { REC = null; return; }
+  if (!ST.desc.trim() && !ST.kwPlus.length) { REC = null; SIM = {}; return; }
+  const q = queryVec(), mk = c => (c.market === '코스피' && ST.mKospi) || (c.market === '코스닥' && ST.mKosdaq);
+  const sc = [];
+  for (const [code, d] of Object.entries(BIZ.docs)) { const c = BY[code]; if (!c || !mk(c)) continue;
+    let s = 0; const hit = []; for (const [t, v] of d) { const qv = q[t]; if (qv) { s += qv * v; hit.push([t, qv * v]); } }
+    if (s > 0) sc.push({ code, s, hit }); }
+  sc.sort((a, b) => b.s - a.s);
+  const top = sc[0] ? sc[0].s : 1; SIM = {}; sc.forEach(x => SIM[x.code] = Math.round(x.s / top * 100));
+  const L = +ST.recLv, T = sc.slice(0, +ST.recTop || 40), agg = {};
+  for (const x of T) { const k = lvKey(BY[x.code].ksic, L); if (!k) continue; const a = agg[k] = agg[k] || { k, s: 0, n: 0, names: [] }; a.s += x.s * x.s; a.n++; if (a.names.length < 4) a.names.push(BY[x.code].name); }
+  const secs = Object.values(agg).sort((a, b) => b.s - a.s), tot = secs.reduce((s, a) => s + a.s, 0) || 1;
+  secs.forEach(a => { a.share = a.s / tot; a.members = COMP.filter(c => mk(c) && secMatch(c, 'ksicp:' + a.k)).length; });
+  REC = { sc, secs, kws: queryWords() };
+  if (fresh || !ST.recSecSel) {   // 기본 선택: 비중 큰 업종부터 누적 60%까지(최대 3개, 업종 안 유사회사 2개 이상), 유사도 상위 N개사
+    let cum = 0; ST.recSecSel = [];
+    for (const a of secs) { if (ST.recSecSel.length >= 3 || cum >= 0.6) break; if (a.n < 2 && ST.recSecSel.length) continue; ST.recSecSel.push(a.k); cum += a.share; }
+    ST.recCoSel = sc.slice(0, +ST.recN || 20).map(x => x.code);
+  }
+  ST.recKw = REC.kws.filter(k => ST.kwAdj[k.w] !== 0).map(k => k.w);
+}
+const simCell = code => { const v = SIM[code]; return v == null ? '<span class="mu">–</span>' : `<span class="bar" style="width:${Math.max(2, v * 0.5)}px"></span>${v}`; };
+function hitWords(x){   // 회사 쪽에서 낱말이 통째로(또는 조각이 전부) 맞은 핵심 키워드만
+  const got = new Set(x.hit.map(h => h[0]));
+  const qw = [...new Set((REC.kws || []).map(k => k.w).concat(ST.kwPlus.map(k => stem(k.toLowerCase().replace(/\s/g, '')))))];
+  return qw.filter(w => ST.kwAdj[w] !== 0 && (got.has(w) || (/[가-힣]/.test(w) && w.length > 2 && piecesOf(w).slice(1).every(t => got.has(t))))).slice(0, 6); }
+const coHas = (code, w) => { const d = BIZ && BIZ.docs[code]; if (!d) return false; const got = new Set(d.map(x => x[0])); return got.has(w) || (/[가-힣]/.test(w) && w.length > 2 && piecesOf(w).slice(1).every(t => got.has(t))); };
+function renderRec(){
+  const box = $('#recBox');
+  if (!BIZ) { box.innerHTML = '<div class="note">추천용 색인(data/biz.json)을 아직 만들지 못했어요. 다음 자동 업데이트 뒤에 쓸 수 있어요.</div>'; return; }
+  if (!REC) { box.innerHTML = `<div class="note">상장사 ${BIZ.n.toLocaleString()}개 색인 준비됨 · 사업보고서 '사업의 개요' 반영 ${(BIZ.withText || 0).toLocaleString()}개사${BIZ.withText < BIZ.n * 0.8 ? ' (나머지는 업종·주요제품·매출비중 품목으로 비교, 매일 채워지는 중)' : ''}</div>`; return; }
+  const secSel = new Set(ST.recSecSel || []), coSel = new Set(ST.recCoSel || []);
+  const kwH = REC.kws.map(k => { const v = ST.kwAdj[k.w]; return `<span class="chip kw ${v === 2 ? 'boost' : v === 0 ? 'off' : ''}" data-kw="${esc(k.w)}" title="누를 때마다: 보통 → ★중요(2배) → 빼기">${v === 2 ? '★ ' : ''}${esc(k.w)}</span>`; }).join('') +
+    ST.kwPlus.map((k, i) => `<span class="chip kw boost">＋ ${esc(k)}<button data-kp="${i}">×</button></span>`).join('');
+  const T = REC.sc.slice(0, Math.max(+ST.recTop || 40, 60));
+  box.innerHTML = `<div class="recgrid">
+    <div><div class="rechead"><h3>핵심 키워드 <span class="x">누르면 ★중요 → 빼기 · 바꾸면 결과가 바로 다시 계산돼요</span></h3>
+      <div style="display:flex;gap:6px"><input type="text" id="kwAdd" placeholder="키워드 직접 추가(예: TMMR)" style="width:200px"><button class="btn sm" id="kwAddBtn">추가</button></div></div>
+      <div class="chips">${kwH || '<span class="x">설명에서 비교할 만한 낱말을 못 찾았어요. 사업 내용을 더 구체적으로 적어 주세요.</span>'}</div></div>
+    <div><div class="rechead"><h3>추천 업종(한국표준산업분류)</h3>
+      <div style="display:flex;gap:6px;align-items:center"><span class="x">분류 단위</span><select id="recLv" style="width:auto"><option value="3">소분류(3자리)</option><option value="4">세분류(4자리)</option><option value="5">세세분류(5자리)</option></select>
+      <span class="x">유사 상위</span><input type="number" id="recTop" value="${esc(ST.recTop)}" min="10" max="200" style="width:64px"><span class="x">개사 기준</span></div></div>
+      <div class="scroll" style="max-height:330px"><table><tr><th class="c">선택</th><th class="l">표준산업분류</th><th>유사 상위 ${ST.recTop}개사 중</th><th>업종 상장사 수</th><th class="l">추천 점수</th><th class="l">유사 회사 예</th></tr>
+      ${REC.secs.slice(0, 15).map(a => `<tr class="${secSel.has(a.k) ? 'hl' : ''}"><td class="c"><input type="checkbox" data-rs="${esc(a.k)}" ${secSel.has(a.k) ? 'checked' : ''}></td><td class="l"><b>C${esc(a.k)}</b> ${esc(ksName(a.k))}</td>
+        <td>${a.n}개사</td><td>${a.members}개사</td><td class="l"><span class="bar" style="width:${Math.max(2, a.share * 120)}px"></span>${fmt(a.share * 100, 0)}%</td><td class="l small">${esc(a.names.join(', '))}</td></tr>`).join('')}</table></div></div>
+    <div><div class="rechead"><h3>사업이 비슷한 상장사 <span class="x">유사도: 1위 = 100</span></h3>
+      <div style="display:flex;gap:6px;align-items:center"><span class="x">상위</span><input type="number" id="recN" value="${esc(ST.recN)}" min="0" max="200" style="width:64px"><span class="x">개사 선택</span></div></div>
+      <div class="scroll" style="max-height:420px"><table><tr><th class="c">선택</th><th>순위</th><th class="l nm">회사</th><th class="l">시장</th><th>유사도</th><th class="l">겹치는 키워드</th><th class="l">표준산업분류</th><th class="l">주요제품(KIND)</th></tr>
+      ${T.map((x, i) => { const c = BY[x.code]; return `<tr class="${coSel.has(x.code) ? 'hl' : ''}"><td class="c"><input type="checkbox" data-rc="${esc(x.code)}" ${coSel.has(x.code) ? 'checked' : ''}></td><td>${i + 1}</td><td class="l nm">${esc(c.name)}<div class="x">${esc(c.code)}</div></td><td class="l">${esc(c.market)}</td>
+        <td>${simCell(x.code)}</td><td class="l small">${esc(hitWords(x).join(', '))}</td><td class="l small">${c.ksic ? `C${esc(c.ksic)} ${esc(ksName(c.ksic))}` : ''}</td><td class="l wrap small">${esc(c.product || '')}</td></tr>`; }).join('')}</table></div></div>
+    <div class="rowbtns"><button class="btn pri" id="recApply">✔ 선택한 업종 + 회사로 모집단 만들기</button><span class="x" id="recPrev"></span></div>
+  </div>`;
+  $('#recLv').value = String(ST.recLv);
+  const prev = () => { const secs = [...(ST.recSecSel || [])], set = new Set(COMP.filter(c => secs.some(k => secMatch(c, 'ksicp:' + k)) && ((c.market === '코스피' && ST.mKospi) || (c.market === '코스닥' && ST.mKosdaq))).map(c => c.code));
+    const extra = (ST.recCoSel || []).filter(c => !set.has(c)); $('#recPrev').textContent = `→ 업종 ${secs.length}개(${set.size}개사) + 업종 밖 유사회사 ${extra.length}개사 = 모집단 약 ${set.size + extra.length}개사`; };
+  prev();
+  $$('#recBox [data-kw]').forEach(b => b.onclick = () => { const w = b.dataset.kw, v = ST.kwAdj[w]; if (v == null) ST.kwAdj[w] = 2; else if (v === 2) ST.kwAdj[w] = 0; else delete ST.kwAdj[w]; runRec(true); save(); renderRec(); });
+  $$('#recBox [data-kp]').forEach(b => b.onclick = e => { e.stopPropagation(); ST.kwPlus.splice(+b.dataset.kp, 1); runRec(true); save(); renderRec(); });
+  const addKw = () => { const v = $('#kwAdd').value.trim(); if (!v) return; v.split(',').map(x => x.trim()).filter(Boolean).forEach(x => { if (!ST.kwPlus.includes(x)) ST.kwPlus.push(x); }); runRec(true); save(); renderRec(); };
+  $('#kwAddBtn').onclick = addKw; $('#kwAdd').onkeydown = e => { if (e.key === 'Enter') addKw(); };
+  $('#recLv').onchange = e => { ST.recLv = +e.target.value; runRec(true); save(); renderRec(); };
+  $('#recTop').onchange = e => { ST.recTop = Math.max(10, +e.target.value || 40); runRec(true); save(); renderRec(); };
+  $('#recN').onchange = e => { ST.recN = Math.max(0, +e.target.value || 0); ST.recCoSel = REC.sc.slice(0, ST.recN).map(x => x.code); save(); renderRec(); };
+  $$('#recBox [data-rs]').forEach(x => x.onchange = () => { const k = x.dataset.rs; ST.recSecSel = x.checked ? [...new Set([...(ST.recSecSel || []), k])] : (ST.recSecSel || []).filter(z => z !== k); save(); renderRec(); });
+  $$('#recBox [data-rc]').forEach(x => x.onchange = () => { const k = x.dataset.rc; ST.recCoSel = x.checked ? [...new Set([...(ST.recCoSel || []), k])] : (ST.recCoSel || []).filter(z => z !== k); save(); prev(); x.closest('tr').classList.toggle('hl', x.checked); });
+  $('#recApply').onclick = async () => {
+    const secs = ST.recSecSel || [];
+    ST.sectors = ST.sectors.filter(s => !s.startsWith('ksicp:')).concat(secs.map(k => 'ksicp:' + k));
+    const inSec = c => ST.sectors.some(s => secMatch(c, s));
+    const extra = (ST.recCoSel || []).filter(code => BY[code] && !inSec(BY[code]));
+    ST.adds = ST.adds.filter(a => !ST.recAdds.includes(a)).concat(extra.filter(a => !ST.adds.includes(a)));
+    ST.recAdds = extra; ST.drops = ST.drops.filter(d => !(ST.recCoSel || []).includes(d));
+    ST.recAt = new Date().toISOString().slice(0, 10); save(); await refresh();
+    $('#popSum').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+}
+async function loadScript(src, glob){ if (window[glob]) return window[glob];
+  await new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error('모듈을 불러오지 못했어요')); document.head.appendChild(s); }); return window[glob]; }
+const unxml = t => { const d = document.createElement('textarea'); d.innerHTML = t; return d.value; };
+async function fileText(f){
+  const n = f.name.toLowerCase();
+  if (n.endsWith('.pdf')) {
+    const lib = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'pdfjsLib');
+    lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const doc = await lib.getDocument({ data: await f.arrayBuffer() }).promise; let t = '';
+    for (let i = 1; i <= Math.min(doc.numPages, 100); i++) { const pg = await doc.getPage(i); const c = await pg.getTextContent(); t += c.items.map(x => x.str).join(' ') + '\n'; $('#fileMsg').textContent = `${f.name} 읽는 중 ${i}/${doc.numPages}쪽`; }
+    return t;
+  }
+  if (n.endsWith('.pptx') || n.endsWith('.docx')) {
+    const JSZip = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip');
+    const z = await JSZip.loadAsync(await f.arrayBuffer());
+    const num = p => +((p.match(/(\d+)\.xml$/) || [])[1] || 0);
+    const list = Object.keys(z.files).filter(p => n.endsWith('.pptx') ? /^ppt\/slides\/slide\d+\.xml$/.test(p) : p === 'word/document.xml').sort((a, b) => num(a) - num(b));
+    let t = ''; for (const p of list) { const x = await z.file(p).async('string'); t += unxml((x.match(/<(?:a|w):t(?:\s[^>]*)?>[^<]*<\/(?:a|w):t>/g) || []).map(s => s.replace(/<[^>]+>/g, '')).join(' ')) + '\n'; }
+    return t;
+  }
+  if (/\.(txt|md|csv)$/.test(n)) return f.text();
+  throw new Error('PDF·PPTX·DOCX·TXT만 읽을 수 있어요(한글 hwp는 PDF로 저장해서 올려 주세요)');
+}
+function bindRec(){
+  const d = $('#desc'); d.value = ST.desc || '';
+  d.addEventListener('input', () => { ST.desc = d.value; save(); });
+  $('#recBtn').onclick = async () => { ST.desc = d.value; if (!ST.desc.trim() && !ST.kwPlus.length) { $('#fileMsg').textContent = '사업 설명을 먼저 적거나 자료를 올려 주세요.'; return; }
+    runRec(true); ST.recAt = ST.recAt || ''; save(); renderRec(); compute(); renderPop(); renderBizTable(); $('#recBox').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  $('#descClear').onclick = () => { d.value = ST.desc = ''; ST.kwAdj = {}; ST.kwPlus = []; REC = null; SIM = {}; ST.recSecSel = ST.recCoSel = null; save(); renderRec(); refreshLight(); };
+  $('#descFile').onchange = async e => {
+    const files = [...e.target.files]; e.target.value = '';
+    for (const f of files) {
+      try { $('#fileMsg').textContent = `${f.name} 읽는 중…`;
+        let t = (await fileText(f)).replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
+        if (t.replace(/\s/g, '').length < 50) { $('#fileMsg').textContent = `${f.name}: 글자를 거의 못 읽었어요(그림으로 된 PDF일 수 있어요). 핵심 내용을 직접 적어 주세요.`; continue; }
+        if (t.length > 40000) t = t.slice(0, 40000);
+        d.value = (d.value.trim() ? d.value.trim() + '\n\n' : '') + `[${f.name}]\n` + t; ST.desc = d.value; save();
+        $('#fileMsg').textContent = `${f.name} → ${t.length.toLocaleString()}자 넣었어요. '모집단 추천 받기'를 누르세요.`;
+      } catch (err) { $('#fileMsg').textContent = `${f.name}: ${err.message}`; }
+    }
+  };
+  ['mKospi', 'mKosdaq'].forEach(k => $('#' + k).addEventListener('change', () => { if (REC) { runRec(false); renderRec(); } }));
+  renderRec();
+}
+$('#kwCrit').onclick = () => {
+  if (!REC || !REC.kws.length) { alert('먼저 ① 모집단에서 회사 설명으로 추천을 받아 주세요.'); return; }
+  // 추천에서 고른 유사회사들이 많이 공유하는 핵심 키워드 순(★ 표시·직접 추가한 키워드 우선)
+  const sel = (ST.recCoSel || []).length ? ST.recCoSel : REC.sc.slice(0, 20).map(x => x.code);
+  const cand = [...ST.kwPlus.map(w => ({ w, s: 1e9 })), ...REC.kws.filter(k => ST.kwAdj[k.w] !== 0).map(k => ({ w: k.w, s: k.s * (ST.kwAdj[k.w] === 2 ? 3 : 1) * Math.log(1 + sel.filter(c => coHas(c, k.w)).length) }))];
+  const pick = [...new Set(cand.filter(x => x.s > 0).sort((a, b) => b.s - a.s).map(x => x.w))].slice(0, 3);
+  ST.crits = ST.crits.filter(c => c.label || c.kw).concat(pick.map(w => ({ label: `${w} 관련 사업 영위`, kw: w })));
+  save(); renderBiz(); refreshLight();
+};
+
+/* 앱으로 설치 */
+(() => {
+  const btn = $('#installBtn'), tip = $('#installTip'), ua = navigator.userAgent;
+  if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) { btn.hidden = true; return; }
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const inApp = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\//i.test(ua), mobile = ios || /Android/i.test(ua);
+  let ev = null;
+  addEventListener('beforeinstallprompt', e => { e.preventDefault(); ev = e; });
+  addEventListener('appinstalled', () => { btn.hidden = true; tip.hidden = true; });
+  btn.onclick = async () => {
+    if (ev) { ev.prompt(); await ev.userChoice; ev = null; return; }
+    tip.innerHTML = inApp ? '카카오톡·네이버 앱 안의 브라우저에서는 설치가 안 돼요. 오른쪽 위 <b>⋮</b> 또는 <b>공유</b> → <b>다른 브라우저로 열기</b>(아이폰 Safari, 안드로이드 Chrome)로 연 뒤 다시 누르세요.'
+      : ios ? '아이폰은 <b>Safari</b>에서: 화면 아래 <b>공유 버튼(□↑)</b> → <b>홈 화면에 추가</b> → <b>추가</b>. 홈 화면에 ‘Peer 밸류’ 아이콘이 생겨요.'
+      : mobile ? '<b>Chrome</b>에서: 오른쪽 위 <b>⋮</b> → <b>앱 설치</b>(또는 <b>홈 화면에 추가</b>) → <b>설치</b>.'
+      : '<b>Chrome·Edge</b>에서: 주소창 오른쪽 끝 <b>설치 아이콘(⊕)</b> 또는 오른쪽 위 <b>⋮</b> → <b>Peer 밸류에이션 설치</b>. 이미 설치했다면 바탕화면·시작 메뉴의 ‘Peer 밸류’로 열면 돼요.';
+    tip.hidden = !tip.hidden;
+  };
+})();
 
 /* 저장·불러오기 */
 $('#saveBtn').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(ST, null, 1)], { type: 'application/json' }));
@@ -699,7 +915,7 @@ async function buildExcel(){
   const kp = ROWS.filter(r => r.market === '코스피').length;
   const nfL = [ST.nAdmin && '평가기준일 현재 관리종목 또는 투자위험 종목으로 지정되지 않았을 것', ST.nList && `평가기준일 현재 상장후 ${ST.nListM}개월 이상 경과하였을 것`, ST.nAudit && '최근 사업연도 감사의견이 적정일 것',
     ST.nMult && `비경상적 ${m} Multiple 기업 제외(${ST.nMin}x 이상, ${ST.nMax}x 이하만 사용)`, ST.nFye && '결산월이 12월일 것'].filter(Boolean).map((t, i) => `${i + 1}) ${t}`).join('\n');
-  const prow = [['모집단 선정', '업종 유사성', `한국표준산업분류 다음 분류에 속하는 기업 중 유가증권시장 및 코스닥시장 상장회사\n${ST.sectors.map(s => `- ${secLabel(s)}`).join('\n')}`, `코스피 ${kp}개사, 코스닥 ${ROWS.length - kp}개사로 총 ${ROWS.length}개사`],
+  const prow = [['모집단 선정', '업종 유사성', `${ST.recAt ? `대상회사 사업 설명(핵심어: ${(ST.recKw || []).slice(0, 8).join(', ')})과 전 상장사의 업종·주요제품·사업보고서 사업의 개요를 비교한 사업 유사도로 추천된\n` : ''}한국표준산업분류 다음 분류에 속하는 기업 중 유가증권시장 및 코스닥시장 상장회사\n${ST.sectors.map(s => `- ${secLabel(s)}`).join('\n')}${ST.adds.length ? `\n- 업종 외 사업 유사 회사 개별 추가: ${ST.adds.map(a => (BY[a] || {}).name || a).join(', ')}` : ''}`, `코스피 ${kp}개사, 코스닥 ${ROWS.length - kp}개사로 총 ${ROWS.length}개사`],
     ['1차', '사업 유사성', `다음 기준 중 한 가지 이상을 충족하는 회사\n${ST.crits.map((c, i) => `${i + 1}) ${c.label || '기준'}`).join('\n')}`, biz.map(r => r.name).join(', ')],
     ['2차', '재무 유사성', `${per}(최근 12개월) 간 ${finLbl.replace(' 시현', '')}을 시현하였을 것${ST.fRev ? `, 매출액 ${ST.fRevMin}억원 이상` : ''}`, biz.filter(r => r.fin === true).map(r => r.name).join(', ')],
     ['3차', '비재무적 유사성', nfL, `${F.map(r => r.name).join(', ')} ${F.length}개사 최종 선정`]];
@@ -776,7 +992,9 @@ async function buildExcel(){
     if (!ST.baseDate) ST.baseDate = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   } catch (e) { $('#upd').textContent = '데이터를 아직 만들지 못했어요(첫 업데이트 전).'; if (!ST.baseDate) ST.baseDate = new Date().toISOString().slice(0, 10); }
   try { DISC = (await getJSON('data/ipo_disc.json')).items || []; } catch (e) { DISC = []; }
-  bindAll(); showStep(ST.step || 'pop'); await refresh();
+  try { [BIZ, KS] = await Promise.all([getJSON('data/biz.json'), getJSON('data/ksic.json')]); } catch (e) { BIZ = BIZ || null; }
+  if (BIZ && ST.desc && ST.recAt) runRec(false);
+  bindAll(); bindRec(); showStep(ST.step || 'pop'); await refresh();
 })();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});   // 앱 설치용
 </script>
