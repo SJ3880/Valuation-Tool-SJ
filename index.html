@@ -81,6 +81,7 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
 :root[data-theme="dark"] .warn{background:#2a2110;color:#e8c27a;border-color:#4d3b17}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .warn{background:#2a2110;color:#e8c27a;border-color:#4d3b17}}
 .empty{padding:30px 10px;text-align:center;color:var(--mu)}
+.pill{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;background:var(--accent);color:#fff;vertical-align:middle}
 .kw{cursor:pointer;user-select:none;padding:3px 10px}
 .kw.boost{background:var(--accent);color:#fff}
 .kw.off{text-decoration:line-through;opacity:.45}
@@ -184,10 +185,11 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
   <div class="pane" id="p-biz">
     <div class="card">
       <h2>② 1차 — 사업 유사성 <span class="x">아래 기준 중 한 가지 이상 충족</span></h2>
+      <div class="note" id="critNote" style="margin-top:0"></div>
       <div id="crits"></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
         <button class="btn sm" id="addCrit">+ 기준 추가</button>
-        <button class="btn sm" id="kwCrit" title="① 추천에서 뽑은 핵심 키워드로 기준을 만들어요">① 핵심 키워드로 기준 만들기</button>
+        <button class="btn sm" id="kwCrit" title="① 회사 설명을 보고 기준 초안을 다시 만들어요(직접 고친 기준은 그대로 둠)">↻ 회사 설명으로 기준 다시 만들기</button>
         <button class="btn sm" id="autoCrit" title="각 기준의 키워드가 주요제품·매출비중·업종·사업보고서 핵심어에 들어 있으면 O로 표시(기존 표시는 유지)">키워드로 자동 체크</button>
         <button class="btn sm" id="clearCrit">체크 모두 지우기</button>
       </div>
@@ -467,10 +469,12 @@ function renderPop(){
 }
 /* ---------------- ② 1차 ---------------- */
 function renderBiz(){
-  $('#crits').innerHTML = ST.crits.map((c, i) => `<div class="crit"><b>${i + 1})</b><input type="text" data-cl="${i}" value="${esc(c.label)}" placeholder="기준 이름 (예: RF 통신 사업 영위)">
+  $('#critNote').innerHTML = ST.crits.some(c => c.auto) ? `<b>자동</b> 표시된 기준은 ① 회사 설명을 보고 사이트가 먼저 잡은 초안이에요. 아니다 싶으면 이름·키워드를 고치거나 ×로 지우고, <b>키워드로 자동 체크</b>를 다시 누르세요(고친 기준은 '다시 만들기'를 해도 그대로 남아요).`
+    : (REC ? '' : '① 모집단에서 회사 설명으로 추천을 받으면 기준 초안이 자동으로 채워져요. 직접 적어도 돼요.');
+  $('#crits').innerHTML = ST.crits.map((c, i) => `<div class="crit"><b>${i + 1})${c.auto ? ' <span class="pill" title="자동으로 만든 기준">자동</span>' : ''}</b><input type="text" data-cl="${i}" value="${esc(c.label)}" placeholder="기준 이름 (예: RF 통신 사업 영위)">
     <input type="text" data-ck="${i}" value="${esc(c.kw)}" placeholder="자동 체크 키워드(쉼표로 구분, 예: RF, 안테나, 중계기)"><button class="btn sm" data-cd="${i}" title="기준 삭제">×</button></div>`).join('');
-  $$('#crits [data-cl]').forEach(x => x.oninput = () => { ST.crits[+x.dataset.cl].label = x.value; save(); renderBizTable(); });
-  $$('#crits [data-ck]').forEach(x => x.oninput = () => { ST.crits[+x.dataset.ck].kw = x.value; save(); });
+  $$('#crits [data-cl]').forEach(x => x.oninput = () => { const c = ST.crits[+x.dataset.cl]; c.label = x.value; c.auto = false; save(); renderBizTable(); });
+  $$('#crits [data-ck]').forEach(x => x.oninput = () => { const c = ST.crits[+x.dataset.ck]; c.kw = x.value; c.auto = false; save(); });
   $$('#crits [data-cd]').forEach(x => x.onclick = () => { const i = +x.dataset.cd; ST.crits.splice(i, 1); for (const k in ST.marks) { const m = ST.marks[k], n = {}; Object.keys(m).forEach(j => { if (+j < i) n[j] = m[j]; else if (+j > i) n[+j - 1] = m[j]; }); ST.marks[k] = n; } save(); refresh(); });
   $('#bizNote').value = ST.bizNote || '';
   renderBizTable();
@@ -629,20 +633,21 @@ function bindAll(){
   bind('mKospi', 'mKospi', false, refresh); bind('mKosdaq', 'mKosdaq', false, refresh);
   bind('dMode', 'dMode', false, () => { ST.dManual = false; save(); refreshLight(); });
   ['dLo', 'dHi'].forEach(k => { const el = $('#' + k); el.addEventListener('input', () => { ST[k] = el.value; ST.dManual = true; save(); renderVal(); renderR(); }); });
-  $('#bizNote').addEventListener('input', e => { ST.bizNote = e.target.value; save(); });
+  $('#bizNote').addEventListener('input', e => { ST.bizNote = e.target.value; ST.bizNoteAuto = false; save(); });
 }
 $('#addCrit').onclick = () => { ST.crits.push({ label: '', kw: '' }); save(); renderBiz(); refreshLight(); };
 $('#clearCrit').onclick = () => { if (confirm('1차 O/X 표시를 모두 지울까요?')) { ST.marks = {}; save(); refreshLight(); } };
-$('#autoCrit').onclick = () => {
+function autoMark(idxs){
   let n = 0;
   for (const r of ROWS) {
     const terms = BIZ && BIZ.docs[r.code] ? BIZ.docs[r.code].map(x => x[0]).join(' ') : '';
     const txt = norm([r.c.product, r.c.sector, ksName(r.c.ksic), mixTxt(r.c), ST.area[r.code], terms].join(' '));
-    ST.crits.forEach((c, i) => { const kws = (c.kw || '').split(',').map(norm).filter(Boolean);
-      if (kws.some(k => txt.includes(k))) { const m = ST.marks[r.code] = ST.marks[r.code] || {}; if (!m[i]) { m[i] = true; n++; } } });
+    ST.crits.forEach((c, i) => { if (idxs && !idxs.includes(i)) return; const raw = (c.kw || '').split(',').map(x => x.trim()).filter(Boolean);
+      if (raw.some(k => txt.includes(norm(k)) || coHas(r.code, stem(k.toLowerCase().replace(/\s/g, ''))))) { const m = ST.marks[r.code] = ST.marks[r.code] || {}; if (!m[i]) { m[i] = true; n++; } } });
   }
-  save(); refreshLight(); alert(`${n}개 칸을 O로 표시했어요. 결과를 꼭 눈으로 확인하세요.`);
-};
+  return n;
+}
+$('#autoCrit').onclick = () => { const n = autoMark(); save(); refreshLight(); alert(`${n}개 칸을 O로 표시했어요. 결과를 꼭 눈으로 확인하세요.`); };
 
 /* 업종·회사 검색 */
 function suggest(inp, box, list, pick){
@@ -767,7 +772,9 @@ function renderRec(){
     ST.adds = ST.adds.filter(a => !ST.recAdds.includes(a)).concat(extra.filter(a => !ST.adds.includes(a)));
     ST.recAdds = extra; ST.drops = ST.drops.filter(d => !(ST.recCoSel || []).includes(d));
     ST.recAt = new Date().toISOString().slice(0, 10); save(); await refresh();
-    $('#popSum').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const nc = applyAutoCrits(); save(); renderBiz(); refreshLight();
+    $('#recPrev').innerHTML = `✔ 모집단을 만들었어요${nc ? ` · ② 1차 사업 유사성 기준 ${nc}개도 자동으로 잡아 뒀어요 <button class="btn sm" id="goBiz">② 1차 기준 보기 →</button>` : ''}`;
+    const gb = $('#goBiz'); if (gb) gb.onclick = () => { showStep('biz'); scrollTo({ top: $('#steps').offsetTop - 10, behavior: 'smooth' }); };
   };
 }
 async function loadScript(src, glob){ if (window[glob]) return window[glob];
@@ -814,13 +821,64 @@ function bindRec(){
   ['mKospi', 'mKosdaq'].forEach(k => $('#' + k).addEventListener('change', () => { if (REC) { runRec(false); renderRec(); } }));
   renderRec();
 }
+/* ② 1차 기준 자동 초안: 회사 설명의 핵심 키워드 중 '사업이 비슷한 상위 회사들이 실제로 공유하는 말'을 골라
+   서로 같은 회사들에 몰려 있는 말끼리 한 기준으로 묶음(최대 3개 기준, 기준마다 키워드 최대 4개) */
+const wordIdf = w => BIZ.idf[w] ?? Math.min(...piecesOf(w).slice(1).map(t => BIZ.idf[t] || 0));
+const dispW = w => /^[a-z0-9]+$/.test(w) ? w.toUpperCase() : w;
+const jac = (A, B) => { let i = 0; A.forEach(x => { if (B.has(x)) i++; }); return i / ((A.size + B.size - i) || 1); };
+const HEADN = new Set('부품 모듈 장비 소재 솔루션 소프트웨어 시스템 기기 서비스 플랫폼 소켓 칩 센서 패치 장치 단말기 안테나 설비 의약품 치료제 진단 키트 기판 필름 케이블 측정기 검사기 로봇 배터리 반도체 장비용 신약 백신 콘텐츠 게임 플랫폼'.split(' '));
+function phraseOf(w){   // 설명 속 '키워드 + 바로 뒤 명사(부품·모듈·장비…)'를 기준 이름으로(예: RF → RF 부품)
+  const raw = (ST.desc.replace(/^\[[^\]\n]*\]$/gm, ' ').match(/[가-힣]+|[A-Za-z0-9]+/g) || []);
+  for (let i = 0; i < raw.length - 1; i++) {
+    const a = stem(raw[i].toLowerCase()), b = stem(raw[i + 1].toLowerCase());
+    if (a === w && HEADN.has(b) && b !== w) return `${/^[a-z0-9]+$/.test(a) ? raw[i] : a} ${b}`;
+  }
+  return null;
+}
+const eunNeun = t => { const ch = (t || '').trim().slice(-1), c = ch.charCodeAt(0); if (!(c >= 0xAC00 && c <= 0xD7A3)) return `${t}은(는)`; return `${t}${(c - 0xAC00) % 28 ? '은' : '는'}`; };
+function makeCrits(){
+  if (!REC || !BIZ) return [];
+  const T = REC.sc.slice(0, 60).map(x => x.code);
+  const cand = [...ST.kwPlus.map(k => ({ w: stem(k.toLowerCase().replace(/\s/g, '')), show: k, s: 1e6, user: true })),
+                ...REC.kws.filter(k => ST.kwAdj[k.w] !== 0).map(k => ({ w: k.w, show: dispW(k.w), s: k.s * (ST.kwAdj[k.w] === 2 ? 3 : 1), star: ST.kwAdj[k.w] === 2 }))];
+  const seen = new Set(), items = [];
+  for (const c of cand) {
+    if (seen.has(c.w)) continue; seen.add(c.w);
+    if (!c.user && !c.star && wordIdf(c.w) < 2.3) continue;           // 상장사 10% 넘게 쓰는 흔한 말(부품·장비 등)은 기준 이름에서 뺌
+    const S = new Set(T.filter(code => coHas(code, c.w)));
+    if (S.size < 2 && !c.user) continue;                               // 비슷한 회사 중 2곳 이상이 실제로 쓰는 말만
+    items.push({ ...c, S, score: c.s * Math.log(1 + S.size) });
+  }
+  items.sort((a, b) => b.score - a.score);
+  const groups = [];
+  for (const it of items) {
+    const g = groups.find(g => g.ws.some(w => w.includes(it.w) || it.w.includes(w)) || (g.ph && g.ph.toLowerCase().split(' ').includes(it.w)) || jac(g.S, it.S) >= 0.4);
+    if (g) { if (g.shows.length < 4) { g.ws.push(it.w); g.shows.push(it.show); } }
+    else if (groups.length < 4) groups.push({ ws: [it.w], shows: [it.show], S: new Set(it.S), ph: phraseOf(it.w) });
+  }
+  return groups.map(g => { const ph = g.ph;
+    const name = ph ? (g.shows.length > 1 ? `${ph}(${g.shows.slice(1, 3).filter(x => !ph.toLowerCase().includes(x.toLowerCase())).join('·')})`.replace('()', '') : ph) : g.shows.slice(0, 2).join('·');
+    return { label: `${name} 관련 사업 영위`, kw: g.shows.join(', '), auto: true }; });
+}
+function applyAutoCrits(){
+  const nc = makeCrits(); if (!nc.length) return 0;
+  compute();
+  const keep = ST.crits.map((c, i) => ({ c, i })).filter(x => !x.c.auto && (x.c.label || x.c.kw));
+  const marks = {};
+  for (const k in ST.marks) { const m = ST.marks[k], n = {}; keep.forEach((x, j) => { if (m[x.i]) n[nc.length + j] = true; }); marks[k] = n; }
+  ST.crits = [...nc, ...keep.map(x => x.c)]; ST.marks = marks;
+  autoMark(nc.map((_, i) => i));
+  if (!ST.bizNote || ST.bizNoteAuto) {
+    const d0 = ST.desc.replace(/^\[[^\]\n]*\]$/gm, ' ').replace(/\s+/g, ' ').trim();
+    const first = ((d0.match(/^.{15,180}?(?:[.。]|다\.?)(?=\s|$)/) || [d0.slice(0, 160)])[0]).trim().replace(/^(당사는|회사는|동사는)\s*/, '');
+    ST.bizNote = `${eunNeun(ST.tName || '회사')} ${first}\n이에 사업 유사성 기준으로 ${nc.map((c, i) => `${i + 1}) ${c.label}`).join(', ')} 중 한 가지 이상을 충족하는 회사를 선정하였습니다.`;
+    ST.bizNoteAuto = true;
+  }
+  return nc.length;
+}
 $('#kwCrit').onclick = () => {
-  if (!REC || !REC.kws.length) { alert('먼저 ① 모집단에서 회사 설명으로 추천을 받아 주세요.'); return; }
-  // 추천에서 고른 유사회사들이 많이 공유하는 핵심 키워드 순(★ 표시·직접 추가한 키워드 우선)
-  const sel = (ST.recCoSel || []).length ? ST.recCoSel : REC.sc.slice(0, 20).map(x => x.code);
-  const cand = [...ST.kwPlus.map(w => ({ w, s: 1e9 })), ...REC.kws.filter(k => ST.kwAdj[k.w] !== 0).map(k => ({ w: k.w, s: k.s * (ST.kwAdj[k.w] === 2 ? 3 : 1) * Math.log(1 + sel.filter(c => coHas(c, k.w)).length) }))];
-  const pick = [...new Set(cand.filter(x => x.s > 0).sort((a, b) => b.s - a.s).map(x => x.w))].slice(0, 3);
-  ST.crits = ST.crits.filter(c => c.label || c.kw).concat(pick.map(w => ({ label: `${w} 관련 사업 영위`, kw: w })));
+  if (!REC) { alert('먼저 ① 모집단에서 회사 설명으로 추천을 받아 주세요.'); return; }
+  if (!applyAutoCrits()) { alert('기준으로 쓸 만한 키워드를 못 찾았어요. ①에서 핵심 키워드에 ★를 주거나 키워드를 직접 추가해 보세요.'); return; }
   save(); renderBiz(); refreshLight();
 };
 
