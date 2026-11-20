@@ -231,7 +231,7 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
     <div class="card">
       <h2>⑤-1 최종 유사회사 · 적용 배수</h2>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><span class="x">최소 Peer 수</span><input type="number" id="minPeers" min="0" max="10" style="width:64px">
-        <span class="x">기준을 모두 통과한 회사가 이보다 적으면 가장 가까운 회사를 자동으로 보완 편입해요(0 = 끔)</span></div>
+        <span class="x">기준을 모두 통과한 회사가 이보다 적으면, 2·3차 기준은 그대로 두고 사업 범위만 넓혀 사업이 가장 비슷한 회사부터 채워요(0 = 끔)</span></div>
       <div id="fillNote"></div>
       <div class="scroll"><table id="peerTbl"></table></div>
     </div>
@@ -449,24 +449,45 @@ function calc(code){
 }
 let ROWS = [];
 function compute(){ ROWS = popCodes().map(calc); if (REC) ROWS.sort((a, b) => (SIM[b.code] || 0) - (SIM[a.code] || 0)); fillMin(); return ROWS; }
-/* 최소 Peer 보장: 1·2·3차를 모두 통과한 회사가 최소 개수보다 적으면, 가장 가까운 회사를 '보완 편입'
-   우선순위: 사업유사성(1차) 통과 > 재무(2차) 통과 > 비재무(3차) 통과 순으로 덜 중요한 단계에서 떨어진 회사부터,
-   같으면 배수 범위 안 → 사업 유사도 높은 순. 관리종목·위험 표시·직접 제외·배수 계산 안 되는 회사는 넣지 않음 */
-let FILLED = [], FILL_SHORT = 0;
+/* 최소 Peer 보장(사업 범위 확장): 1·2·3차를 모두 통과한 회사가 최소 개수보다 적으면
+   2차(재무)·3차(비재무: 감사의견·관리종목·배수 범위 등)는 절대 완화하지 않고, 사업 범위만 넓혀서 채움
+   ① 모집단 안에서 1차 기준만 못 넘은 회사 → ② 모집단 밖에서 사업이 비슷한 회사(사업 유사도 순, 설명이 없으면 상위 업종으로 한 단계씩)
+   그래도 모자라면 넣지 않고, 기준에서 아깝게 떨어진 회사를 '참고'로만 보여줌 */
+let FILLED = [], FILL_SHORT = 0, NEAR = [], EXP_TRIED = new Set();
+function expPool(){
+  const pop = new Set(ROWS.map(r => r.code)), mk = c => (c.market === '코스피' && ST.mKospi) || (c.market === '코스닥' && ST.mKosdaq);
+  if (REC) return REC.sc.filter(x => !pop.has(x.code) && !ST.drops.includes(x.code) && BY[x.code] && mk(BY[x.code])).slice(0, 150).map(x => x.code);
+  const ks = ST.sectors.map(secKey).filter(k => /^ksicp?:/.test(k)).map(k => k.split(':')[1]), out = [];
+  for (const L of [4, 3, 2]) {
+    for (const c of COMP) if (mk(c) && !pop.has(c.code) && !ST.drops.includes(c.code) && c.ksic && ks.some(k => k.length > L && c.ksic.slice(0, L) === k.slice(0, L)) && !out.includes(c.code)) out.push(c.code);
+    if (out.length >= 150) break;
+  }
+  return out.slice(0, 150);
+}
 function fillMin(){
-  FILLED = []; FILL_SHORT = 0;
+  FILLED = []; FILL_SHORT = 0; NEAR = [];
   const min = Math.max(0, +ST.minPeers || 0), have = ROWS.filter(r => r.final).length;
   if (have >= min) return;
-  const lo = +ST.nMin || 0, hi = +ST.nMax || 1e9;
-  const near = r => { const d = r.mult < lo ? lo / r.mult : r.mult > hi ? r.mult / hi : 1; return d <= 2 ? 1 : 0; };   // 배수가 범위의 2배 안쪽이면 '가까움'
-  const w = r => (!r.biz) * 4 + (r.fin !== true) * 2 + (r.nf !== true) * 1;
-  const cand = ROWS.filter(r => !r.final && (ST.ov[r.code] || {}).mode !== 'out' && r.mult != null && r.mult > 0 && r.mcap && r.nfd.admin !== false)
-    .sort((a, b) => w(a) - w(b) || ((b.nfd.mult === true) - (a.nfd.mult === true)) || (near(b) - near(a)) || (SIM[b.code] || 0) - (SIM[a.code] || 0) || (b.mcap || 0) - (a.mcap || 0));
+  const ok = r => r.fin === true && r.nf === true && r.mult != null && (ST.ov[r.code] || {}).mode !== 'out';
+  const pool = expPool(), miss = pool.filter(c => !CACHE[c] && !EXP_TRIED.has(c));
+  if (miss.length) { miss.forEach(c => EXP_TRIED.add(c)); loadMany(miss).then(() => refreshLight()); }
+  const inPop = ROWS.filter(r => !r.final && !r.biz && ok(r));
+  const outRows = pool.filter(c => CACHE[c]).map(calc);
+  const order = (a, b) => REC ? (SIM[b.code] || 0) - (SIM[a.code] || 0) : 0;
+  const cand = [...inPop.sort(order), ...outRows.filter(ok)].sort(order);
+  const rank = REC ? Object.fromEntries(REC.sc.map((x, i) => [x.code, i + 1])) : {};
   for (const r of cand.slice(0, min - have)) {
-    const miss = [!r.biz && '1차', r.fin !== true && '2차', r.nf !== true && '3차'].filter(Boolean);
-    r.final = true; r.fill = true; r.reason = `최소 Peer ${min}개 보완 편입(${miss.join('·')} 미충족)`; FILLED.push(r);
+    const ext = !ROWS.includes(r);
+    r.final = true; r.fill = true; r.ext = ext;
+    r.reason = `사업 범위 확장 편입(${ext ? '모집단 밖' : '1차 기준 밖'}${rank[r.code] ? `, 사업 유사도 ${rank[r.code]}위` : ''})`;
+    if (ext) ROWS.push(r);
+    FILLED.push(r);
   }
   FILL_SHORT = Math.max(0, min - have - FILLED.length);
+  if (FILL_SHORT) {   // 참고용: 사업은 비슷하지만 2·3차에서 떨어진 회사(자동으로 넣지 않음)
+    const why = r => r.fin !== true ? '2차 재무 기준' : r.nfd.audit === false ? '감사의견' : r.nfd.admin === false ? '관리종목·위험' : r.nfd.list === false ? '상장 기간' : r.nfd.fye === false ? '결산월' : r.nfd.mult === false ? '배수 범위' : r.mult == null ? '배수 계산 불가' : '자료 부족';
+    NEAR = [...ROWS.filter(r => !r.final && r.biz), ...outRows.filter(r => !ok(r))].sort(order).slice(0, 4).map(r => ({ name: r.name, why: why(r) }));
+  }
 }
 const stat = arr => { const v = arr.filter(x => x != null && isFinite(x)).sort((a, b) => a - b); if (!v.length) return {}; const mean = v.reduce((s, x) => s + x, 0) / v.length; return { n: v.length, mean, med: v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2, min: v[0], max: v[v.length - 1] }; };
 const MN = { per: 'PER', psr: 'PSR', ev: 'EV/EBITDA', pbr: 'PBR' };
@@ -560,14 +581,13 @@ function renderVal(){
   const F = finals(), m = ST.method, s = stat(F.map(r => r.mult));
   const cols = [['시장', r => esc(r.market)], ['기준주가(원)', r => fmt(r.price)], [`시가총액(${UL()})`, r => amt(r.mcap)], [`매출액(${UL()})`, r => amt(r.rev)], [`영업이익(${UL()})`, r => amt(r.op)],
     [`당기순이익(${UL()})`, r => amt(r.ni)], ['PER', r => mx(r.per)], ['PSR', r => mx(r.psr)], ['EV/EBITDA', r => mx(r.evx)], ['PBR', r => mx(r.pbr)]];
-  $('#peerTbl').innerHTML = F.length ? `<tr><th class="l nm">회사</th>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr>` + F.map(r => `<tr><td class="l nm">${esc(r.name)}${r.fill ? ' <span class="pill" style="background:var(--warn,#d97706)" title="' + esc(r.reason) + '">보완</span>' : ''}</td>${cols.map(c => `<td>${c[1](r)}</td>`).join('')}</tr>`).join('') +
+  $('#peerTbl').innerHTML = F.length ? `<tr><th class="l nm">회사</th>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr>` + F.map(r => `<tr><td class="l nm">${esc(r.name)}${r.fill ? ' <span class="pill" title="' + esc(r.reason) + '">확장</span>' : ''}</td>${cols.map(c => `<td>${c[1](r)}</td>`).join('')}</tr>`).join('') +
     ['per', 'psr', 'ev', 'pbr'].reduce((h, k) => h, '') +
     `<tr class="avg"><td class="l nm">평균</td><td></td><td></td><td></td><td></td><td></td><td></td>${['per', 'psr', 'evx', 'pbr'].map(k => `<td>${mx(stat(F.map(r => r[k])).mean)}</td>`).join('')}</tr>` +
     `<tr class="avg"><td class="l nm">적용 배수(${MN[m]})</td><td colspan="10" class="l">${mx(appliedMult())} 배 ${ST.appMult !== '' && ST.appMult != null ? '<span class="tag">직접 입력</span>' : `<span class="x">최종 ${s.n || 0}개사 평균</span>`}</td></tr>`
     : '<tr><td class="empty">④에서 최종 선정된 회사가 없어요.</td></tr>';
-  $('#fillNote').innerHTML = FILLED.length || FILL_SHORT ? `<div class="warn" style="margin-bottom:8px">⚠ 1·2·3차를 모두 통과한 회사가 ${F.length - FILLED.length}개뿐이라 최소 ${ST.minPeers}개를 맞추려고 가장 가까운 회사를 보완 편입했어요.
-    ${FILLED.map(r => `<b>${esc(r.name)}</b>(${esc(r.reason.replace(/^.*\(/, '').replace(')', ''))})`).join(', ')}${FILL_SHORT ? ` · 배수를 계산할 수 있는 회사가 부족해 ${FILL_SHORT}개는 못 채웠어요(모집단을 넓혀 주세요)` : ''}
-    <span class="x">— 바꾸려면 ④에서 회사별 포함/제외를 지정하세요.</span></div>` : '';
+  $('#fillNote').innerHTML = FILLED.length || FILL_SHORT ? `<div class="warn" style="margin-bottom:8px">${FILLED.length ? `ⓘ 1·2·3차를 모두 통과한 회사가 ${F.length - FILLED.length}개라, 사업 범위를 넓혀 2·3차 기준을 모두 통과한 회사 ${FILLED.length}개를 더했어요(최소 ${ST.minPeers}개): ${FILLED.map(r => `<b>${esc(r.name)}</b>(${esc(r.reason.replace(/^사업 범위 확장 편입\(/, '').replace(/\)$/, ''))})`).join(', ')}` : ''}
+    ${FILL_SHORT ? `${FILLED.length ? '<br>' : ''}⚠ 사업 범위를 넓혀도 2·3차 기준(재무·감사의견·배수 등)을 통과한 회사가 부족해 <b>${FILL_SHORT}개</b>를 못 채웠어요. 기준을 낮춰 억지로 넣지는 않았어요.${NEAR.length ? ` 참고로 사업은 비슷하지만 기준에서 떨어진 회사: ${NEAR.map(x => `${esc(x.name)}(${esc(x.why)})`).join(', ')}` : ''} — ①에서 업종·회사를 더하거나, 필요하면 ④에서 직접 포함하세요.` : ''}</div>` : '';
   // 할인율
   const d = discAuto();
   $('#dNWrap').style.display = ST.dMode === 'lastN' ? '' : 'none';
@@ -617,7 +637,7 @@ function renderR(){
   const f2 = rows.filter(r => r.fin === true);
   lines.push(`<b>2차(재무유사성) 충족 회사: ${f2.length}개사</b> — ${lbl ? esc(lbl.label) + ' ' : ''}${esc(finLbl)}${f2.length && f2.length <= 12 ? `: ${f2.map(r => esc(r.name)).join(', ')}` : ''}`);
   lines.push(`<b>3차(비재무적 유사성) 충족 회사: ${F.length}개사</b>${F.length ? ` — ${F.map(r => esc(r.name)).join(', ')}` : ''}`);
-  if (FILLED.length) lines.push(`<b>최소 Peer 보완</b>: ${FILLED.map(r => `${esc(r.name)}(${esc(r.reason.replace(/^.*\(/, '').replace(')', ''))})`).join(', ')}`);
+  if (FILLED.length) lines.push(`<b>사업 범위 확장 편입</b>: ${FILLED.map(r => `${esc(r.name)}(${esc(r.reason.replace(/^사업 범위 확장 편입\(/, '').replace(/\)$/, ''))})`).join(', ')} — 2·3차 기준은 모두 충족`);
   lines.push(`<b>최종 평균 ${m}</b>: ${mx(stat(F.map(r => r.mult)).mean)}배${ST.appMult !== '' && ST.appMult != null ? ` (적용 배수 직접 입력 ${mx(+ST.appMult)}배)` : ''}`);
   $('#rSum').innerHTML = lines.join('<br>');
   const per = lbl ? lbl.label : '';
@@ -637,7 +657,7 @@ function renderR(){
 
 /* ---------------- 공통 ---------------- */
 function counts(){
-  $('#n-pop').textContent = ROWS.length; $('#n-biz').textContent = ROWS.filter(r => r.biz).length;
+  $('#n-pop').textContent = ROWS.filter(r => !r.ext).length; $('#n-biz').textContent = ROWS.filter(r => r.biz).length;
   $('#n-fin').textContent = ROWS.filter(r => r.biz && r.fin === true).length; $('#n-nf').textContent = finals().length;
 }
 async function refresh(){
