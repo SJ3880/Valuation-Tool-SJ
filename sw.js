@@ -1,5 +1,5 @@
 // Peer 밸류에이션 서비스워커: 앱 설치용. 항상 네트워크 먼저(최신 데이터), 끊겼을 때만 마지막으로 본 화면·데이터 표시
-const CACHE = "pv-v8";
+const CACHE = "pv-v9";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icons/icon-192.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => {
