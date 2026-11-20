@@ -108,6 +108,7 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
       <div class="sub" id="upd">데이터 불러오는 중…</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn" id="lockBtn" hidden title="이 기기에 기억한 비밀번호를 지우고 잠가요">🔒 잠그기</button>
       <button class="btn" id="installBtn" title="휴대폰·PC에 앱으로 설치">📲 앱으로 설치</button>
       <button class="btn" id="saveBtn" title="지금 작업을 파일로 저장(나중에 불러오기)">💾 작업 저장</button>
       <button class="btn" id="loadBtn" title="저장한 작업 파일 불러오기">📂 불러오기</button><input type="file" id="loadFile" accept=".json" hidden>
@@ -954,6 +955,9 @@ $('#kwCrit').onclick = () => {
   if (!applyAutoCrits()) { alert('기준으로 쓸 만한 키워드를 못 찾았어요. ①에서 핵심 키워드에 ★를 주거나 키워드를 직접 추가해 보세요.'); return; }
   save(); renderBiz(); refreshLight();
 };
+
+/* 사이트 잠금(배포 때 scripts/lock.py 가 씌움) */
+if (window.__pvLocked) { const b = $('#lockBtn'); b.hidden = false; b.onclick = () => { try { localStorage.removeItem('pv:lock'); } catch (e) {} location.reload(); }; }
 
 /* 앱으로 설치 */
 (() => {

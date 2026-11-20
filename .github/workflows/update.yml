@@ -28,6 +28,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: actions/configure-pages@v5
+      - name: 사이트 잠금(비밀번호)
+        env:
+          SITE_PASSWORDS: ${{ secrets.SITE_PASSWORDS }}
+        run: python3 -m pip install -q cryptography && python3 scripts/lock.py
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
@@ -71,6 +75,11 @@ jobs:
           git push
       - uses: actions/configure-pages@v5
         if: ${{ !cancelled() }}
+      - name: 사이트 잠금(비밀번호)
+        if: ${{ !cancelled() }}
+        env:
+          SITE_PASSWORDS: ${{ secrets.SITE_PASSWORDS }}
+        run: python3 -m pip install -q cryptography && python3 scripts/lock.py
       - uses: actions/upload-pages-artifact@v3
         if: ${{ !cancelled() }}
         with:
