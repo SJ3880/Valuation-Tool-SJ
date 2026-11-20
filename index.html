@@ -298,7 +298,7 @@ $('#tTrack').innerHTML = TRACKS.map(t => `<option>${t}</option>`).join('');
 const DEF = () => ({ tName: '', baseDate: '', tMkt: '코스닥', tTrack: '일반', method: 'per', pxMode: 'min3', earnMode: 'ltm', unit: '1e6',
   sectors: [], mKospi: true, mKosdaq: true, adds: [], drops: [],
   desc: '', kwAdj: {}, kwPlus: [], recLv: 4, recN: 20, recTop: 40, recSecSel: null, recCoSel: null, recAdds: [], recAt: '', recKw: [],
-  crits: [{ label: '', kw: '' }], marks: {}, area: {}, bizNote: '', minPeers: 2,
+  crits: [{ label: '', kw: '' }], marks: {}, area: {}, bizNote: '', minPeers: 2, expSecs: [], expBlock: [], expInfo: {},
   fOp: true, fNi: true, fEb: false, fRev: false, fRevMin: 0,
   nAdmin: true, nList: true, nListM: 6, nAudit: true, nFye: true, nMult: true, nMin: 10, nMax: 50, risk: {}, ov: {},
   dMode: 'last1', dN: 5, dSince: '2023-01-01', dLo: '', dHi: '', dManual: false,
@@ -452,8 +452,10 @@ let ROWS = [];
 function compute(){ ROWS = popCodes().map(calc); if (REC) ROWS.sort((a, b) => (SIM[b.code] || 0) - (SIM[a.code] || 0)); fillMin(); return ROWS; }
 /* 최소 Peer 보장(사업 범위 확장): 1·2·3차를 모두 통과한 회사가 최소 개수보다 적으면
    2차(재무)·3차(비재무: 감사의견·관리종목·배수 범위 등)는 절대 완화하지 않고, 사업 범위만 넓혀서 채움
-   ① 모집단 안에서 1차 기준만 못 넘은 회사 → ② 모집단 밖에서 사업이 비슷한 회사(사업 유사도 순, 설명이 없으면 상위 업종으로 한 단계씩)
-   그래도 모자라면 넣지 않고, 기준에서 아깝게 떨어진 회사를 '참고'로만 보여줌 */
+   ① 모집단 밖에서 사업이 비슷하고 2·3차를 통과할 회사가 있으면, 그 회사 하나만 넣지 않고 '그 회사의 업종'을 모집단에 추가(ensureMin)
+      → 추가된 업종 회사들도 1차 → 2차 → 3차를 똑같이 거침(막판에 갑자기 들어오지 않게)
+   ② 모집단 안에서 1차 기준만 못 넘은 회사(사업 유사도 순)
+   ③ 그래도 모자라면 배수 범위만 단계적으로 넓힘. 그래도 없으면 넣지 않고 '참고'로만 보여줌 */
 let FILLED = [], FILL_SHORT = 0, NEAR = [], EXP_TRIED = new Set(), WIDE = null;
 function expPool(){
   const pop = new Set(ROWS.map(r => r.code)), mk = c => (c.market === '코스피' && ST.mKospi) || (c.market === '코스닥' && ST.mKosdaq);
@@ -470,17 +472,16 @@ function fillMin(){
   const min = Math.max(0, +ST.minPeers || 0), have = ROWS.filter(r => r.final).length;
   if (have >= min) return;
   const ok = r => r.fin === true && r.nf === true && r.mult != null && (ST.ov[r.code] || {}).mode !== 'out';
-  const pool = expPool(), miss = pool.filter(c => !CACHE[c] && !EXP_TRIED.has(c));
-  if (miss.length) { miss.forEach(c => EXP_TRIED.add(c)); loadMany(miss).then(() => refreshLight()); }
-  const inPop = ROWS.filter(r => !r.final && !r.biz && ok(r));
-  const outRows = pool.filter(c => CACHE[c]).map(calc);
-  const order = (a, b) => REC ? (SIM[b.code] || 0) - (SIM[a.code] || 0) : 0;
-  const cand = [...inPop.sort(order), ...outRows.filter(ok)].sort(order);
   const rank = REC ? Object.fromEntries(REC.sc.map((x, i) => [x.code, i + 1])) : {};
+  const inPop = ROWS.filter(r => !r.final && !r.biz && ok(r) && (!REC || (SIM[r.code] || 0) >= 40));   // 사업 유사도 40 이상(1위 = 100)만
+  const outRows = expPool().filter(c => CACHE[c]).map(calc);      // 참고 후보 표시용(모집단에 넣지는 않음)
+  const order = (a, b) => REC ? (SIM[b.code] || 0) - (SIM[a.code] || 0) : 0;
+  const cand = inPop.sort(order);
   for (const r of cand.slice(0, min - have)) {
     const ext = !ROWS.includes(r);
     r.final = true; r.fill = true; r.ext = ext;
-    r.reason = `사업 범위 확장 편입(${ext ? '모집단 밖' : '1차 기준 밖'}${rank[r.code] ? `, 사업 유사도 ${rank[r.code]}위` : ''})`;
+    const es = ST.expSecs.find(k => secMatch(r.c, k));
+    r.reason = `사업 범위 확장 편입(1차 기준 밖${rank[r.code] ? `, 사업 유사도 ${rank[r.code]}위` : ''}${es ? `, 확장 업종 ${secLabel(es)}` : ''})`;
     if (ext) ROWS.push(r);
     FILLED.push(r);
   }
@@ -490,7 +491,7 @@ function fillMin(){
   if (FILL_SHORT && ST.nMult) {
     const lo = +ST.nMin || 0, hi = +ST.nMax || 1e9;
     const othersOk = r => [['admin', ST.nAdmin], ['list', ST.nList], ['audit', ST.nAudit], ['fye', ST.nFye]].filter(x => x[1]).every(x => r.nfd[x[0]] === true);
-    const pool2 = [...ROWS, ...outRows.filter(r => !ROWS.includes(r))].filter(r => !r.final && r.fin === true && othersOk(r) && r.mult != null && r.mult > 0 && (ST.ov[r.code] || {}).mode !== 'out');
+    const pool2 = ROWS.filter(r => !r.final && r.fin === true && othersOk(r) && r.mult != null && r.mult > 0 && (ST.ov[r.code] || {}).mode !== 'out');
     const pri = r => (r.biz ? 0 : ROWS.includes(r) ? 1 : 2);
     for (const f of [1.25, 1.5, 2, 3]) {
       const L = lo / f, H = hi * f;
@@ -514,6 +515,43 @@ function fillMin(){
     NEAR = [...ROWS.filter(r => !r.final && r.biz), ...outRows.filter(r => !ok(r))].sort(order).slice(0, 4).map(r => ({ name: r.name, why: why(r) }));
   }
 }
+/* 모집단 밖 유사 회사의 '업종'을 모집단에 추가(한 번에 한 업종, 최대 3개). 사용자가 지운 확장 업종은 다시 넣지 않음 */
+let EXPANDING = false, EXP_TIMER = null;
+const ensureMinSoon = () => { clearTimeout(EXP_TIMER); EXP_TIMER = setTimeout(ensureMin, 900); };   // 입력 중간값으로 업종이 붙지 않게 잠깐 기다렸다 실행
+async function ensureMin(){
+  const min = +ST.minPeers || 0;
+  if (EXPANDING || !ST.sectors.length) return false;
+  let changed = false;
+  // 조건이 바뀌어 더 이상 최종 Peer를 내지 못하는 확장 업종은 모집단에서 뺌
+  const live = ST.expSecs.filter(k => ST.sectors.includes(k));
+  const dead = live.filter(k => !ROWS.some(r => r.final && secMatch(r.c, k)) || (min && ROWS.filter(r => r.final && !r.wide && !secMatch(r.c, k)).length >= min));
+  if (dead.length) { ST.sectors = ST.sectors.filter(k => !dead.includes(k)); ST.expSecs = ST.expSecs.filter(k => !dead.includes(k)); dead.forEach(k => delete ST.expInfo[k]); compute(); changed = true; }
+  const enough = () => ROWS.filter(r => r.final && !r.wide).length >= min;
+  if (!min || enough()) { if (changed) { save(); counts(); renderPop(); renderBiz(); renderFin(); renderNf(); renderVal(); renderR(); } return changed; }
+  EXPANDING = true;
+  try {
+    for (let step = 0; step < 3 && !enough(); step++) {
+      const pool = expPool();
+      await loadMany(pool);
+      const rank = REC ? Object.fromEntries(REC.sc.map((x, i) => [x.code, i + 1])) : {};
+      const passing = pool.map(calc).filter(r => r.fin === true && r.nf === true && r.mult != null && r.c.ksic && (ST.ov[r.code] || {}).mode !== 'out'
+        && !ST.expBlock.includes('ksicp:' + lvKey(r.c.ksic, +ST.recLv || 4)));
+      // 1차 키워드에도 맞고 사업 유사도 20 이상인 회사 → 없으면 사업 유사도 40 이상(1위 = 100)인 회사. 둘 다 없으면 확장 안 함(→ 배수 범위 확장)
+      const cand = passing.find(r => critHits(r).some(Boolean) && (!REC || (SIM[r.code] || 0) >= 20)) || passing.find(r => !REC || (SIM[r.code] || 0) >= 40);
+      if (!cand) break;
+      const k = 'ksicp:' + lvKey(cand.c.ksic, +ST.recLv || 4);
+      if (ST.sectors.includes(k)) { if (!ST.adds.includes(cand.code)) ST.adds.push(cand.code); }   // 업종은 이미 있는데 시장 등으로 빠진 경우
+      else { ST.sectors.push(k); ST.expSecs.push(k); }
+      ST.expInfo[k] = `${cand.name}${rank[cand.code] ? `(사업 유사도 ${rank[cand.code]}위)` : ''}이(가) 2·3차를 통과해 이 업종을 모집단에 추가`;
+      const before = new Set(ROWS.map(r => r.code));
+      await loadMany(popCodes()); compute();
+      autoMark(null, ROWS.filter(r => !before.has(r.code)).map(r => r.code)); compute();   // 새로 들어온 회사에도 1차 키워드 체크
+      changed = true;
+    }
+  } finally { EXPANDING = false; }
+  if (changed) { save(); counts(); renderPop(); renderBiz(); renderFin(); renderNf(); renderVal(); renderR(); }
+  return changed;
+}
 const stat = arr => { const v = arr.filter(x => x != null && isFinite(x)).sort((a, b) => a - b); if (!v.length) return {}; const mean = v.reduce((s, x) => s + x, 0) / v.length; return { n: v.length, mean, med: v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2, min: v[0], max: v[v.length - 1] }; };
 const MN = { per: 'PER', psr: 'PSR', ev: 'EV/EBITDA', pbr: 'PBR' };
 const mixTxt = c => (c.mix || []).map(m => `${m.n}(${m.p}%)`).join(', ');
@@ -521,8 +559,9 @@ const mixTxt = c => (c.mix || []).map(m => `${m.n}(${m.p}%)`).join(', ');
 /* ---------------- 렌더: ① 모집단 ---------------- */
 function renderPop(){
   $('#secChips').innerHTML = ST.sectors.map(s => { const k = secKey(s); const n = COMP.filter(c => secMatch(c, k)).length;
-    return `<span class="chip">${k.startsWith('kind:') ? '<span class="x">KIND 업종</span> ' : ''}${esc(secLabel(s))}${k.startsWith('ksicp:') ? ' <span class="x">(하위 포함)</span>' : ''} <span class="x">${n}개</span><button data-x="${esc(s)}">×</button></span>`; }).join('');
-  $$('#secChips [data-x]').forEach(b => b.onclick = () => { ST.sectors = ST.sectors.filter(s => s !== b.dataset.x); save(); refresh(); });
+    return `<span class="chip">${k.startsWith('kind:') ? '<span class="x">KIND 업종</span> ' : ''}${esc(secLabel(s))}${k.startsWith('ksicp:') ? ' <span class="x">(하위 포함)</span>' : ''} <span class="x">${n}개</span>${ST.expSecs.includes(s) ? ` <span class="pill" title="${esc(ST.expInfo[s] || '최소 Peer 확보를 위한 사업 범위 확장')}">확장</span>` : ''}<button data-x="${esc(s)}">×</button></span>`; }).join('') +
+    (ST.expSecs.some(s => ST.sectors.includes(s)) ? `<div class="note" style="width:100%">‘확장’ 업종: 최종 Peer가 최소 ${ST.minPeers}개에 못 미쳐, 사업이 비슷하고 2·3차를 통과하는 회사의 업종을 모집단에 넣었어요 — ${ST.expSecs.filter(s => ST.sectors.includes(s)).map(s => esc(`${secLabel(s)}: ${ST.expInfo[s] || ''}`)).join(' · ')}. ×로 빼면 다시 넣지 않아요.</div>` : '');
+  $$('#secChips [data-x]').forEach(b => b.onclick = () => { const x = b.dataset.x; ST.sectors = ST.sectors.filter(s => s !== x); if (ST.expSecs.includes(x) && !ST.expBlock.includes(x)) ST.expBlock.push(x); save(); refresh(); });
   $('#addChips').innerHTML = ST.adds.map(a => `<span class="chip">+ ${esc((BY[a] || {}).name || a)}${ST.recAdds.includes(a) ? ' <span class="x">추천</span>' : ''}<button data-x="${esc(a)}">×</button></span>`).join('') +
     ST.drops.map(a => `<span class="chip" style="text-decoration:line-through">${esc((BY[a] || {}).name || a)}<button data-u="${esc(a)}" title="다시 넣기">↺</button></span>`).join('');
   $$('#addChips [data-x]').forEach(b => b.onclick = () => { ST.adds = ST.adds.filter(s => s !== b.dataset.x); save(); refresh(); });
@@ -657,7 +696,7 @@ function renderR(){
       ${r.crit.map(b => `<td class="c">${OX(b)}</td>`).join('')}<td class="c">${OX(r.fin)}</td><td class="c">${r.fin === true ? OX(r.nf) : ''}</td><td>${r.fin === true ? mx(r.mult) : ''}</td><td class="l">${esc(r.reason)}</td><td>${i === 0 && F.length ? mx(appliedMult()) : r.final ? '' : ''}</td></tr>`).join('') : '<tr><td class="empty">아직 1차 충족 회사가 없어요.</td></tr>';
   const pop = ROWS, kp = pop.filter(r => r.market === '코스피').length;
   const lines = [];
-  lines.push(`<b>모집단</b>: ${ST.sectors.map(s => esc(secLabel(s))).join(', ') || '–'}${ST.adds.length ? ` + 개별 추가 ${ST.adds.length}개사` : ''} — 코스피 ${kp}개사, 코스닥 ${pop.length - kp}개사로 총 ${pop.length}개사`);
+  lines.push(`<b>모집단</b>: ${ST.sectors.map(s => esc(secLabel(s)) + (ST.expSecs.includes(s) ? ' [최소 Peer 확보를 위해 확장]' : '')).join(', ') || '–'}${ST.adds.length ? ` + 개별 추가 ${ST.adds.length}개사` : ''} — 코스피 ${kp}개사, 코스닥 ${pop.length - kp}개사로 총 ${pop.length}개사`);
   lines.push(`<b>1차(사업유사성) 충족 회사: ${rows.length}개사</b>(아래 사업 중 1개 이상 충족)`);
   ST.crits.forEach((c, i) => { const hit = rows.filter(r => r.crit[i]); lines.push(`&nbsp;&nbsp;${i + 1}) ${esc(c.label || '기준')}: ${hit.length}개사${hit.length && hit.length <= 8 ? `(${hit.map(r => esc(r.name)).join(', ')})` : ''}`); });
   const f2 = rows.filter(r => r.fin === true);
@@ -692,6 +731,7 @@ async function refresh(){
   await loadMany(codes);
   compute(); counts();
   renderPop(); renderBiz(); renderFin(); renderNf(); renderVal(); renderR();
+  ensureMinSoon();
 }
 function showStep(s){ ST.step = s; save(); $$('#steps button').forEach(b => b.classList.toggle('on', b.dataset.s === s)); $$('.pane').forEach(p => p.classList.toggle('on', p.id === 'p-' + s)); }
 $$('#steps button').forEach(b => b.onclick = () => showStep(b.dataset.s));
@@ -699,7 +739,7 @@ $$('#steps button').forEach(b => b.onclick = () => showStep(b.dataset.s));
 // 입력값 ↔ 상태
 const bind = (id, key, num, after) => { const el = $('#' + id); const set = () => { el.type === 'checkbox' ? el.checked = !!ST[key] : el.value = ST[key] ?? ''; }; set();
   el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' || el.type === 'date' ? 'change' : 'input', () => { ST[key] = el.type === 'checkbox' ? el.checked : el.value; save(); (after || refreshLight)(); }); };
-function refreshLight(){ compute(); counts(); renderPop(); renderBizTable(); renderFin(); renderNf(); renderVal(); renderR(); }
+function refreshLight(){ compute(); counts(); renderPop(); renderBizTable(); renderFin(); renderNf(); renderVal(); renderR(); ensureMinSoon(); }
 function bindAll(){
   ['tName', 'tMkt', 'tTrack', 'method', 'pxMode', 'earnMode', 'unit', 'fOp', 'fNi', 'fEb', 'fRev', 'fRevMin', 'nAdmin', 'nList', 'nListM', 'nAudit', 'nFye', 'nMult', 'nMin', 'nMax', 'appMult', 'tEarn', 'tNd', 'tSh', 'dN', 'dSince'].forEach(k => bind(k, k));
   bind('baseDate', 'baseDate', false, refresh);
@@ -711,13 +751,16 @@ function bindAll(){
 }
 $('#addCrit').onclick = () => { ST.crits.push({ label: '', kw: '' }); save(); renderBiz(); refreshLight(); };
 $('#clearCrit').onclick = () => { if (confirm('1차 O/X 표시를 모두 지울까요?')) { ST.marks = {}; save(); refreshLight(); } };
-function autoMark(idxs){
+function critHits(r){   // 각 1차 기준의 키워드가 이 회사 주요제품·매출비중·업종·사업보고서 핵심어에 있는지
+  const terms = BIZ && BIZ.docs[r.code] ? BIZ.docs[r.code].map(x => x[0]).join(' ') : '';
+  const txt = norm([r.c.product, r.c.sector, ksName(r.c.ksic), mixTxt(r.c), ST.area[r.code], terms].join(' '));
+  return ST.crits.map(c => (c.kw || '').split(',').map(x => x.trim()).filter(Boolean).some(k => txt.includes(norm(k)) || coHas(r.code, stem(k.toLowerCase().replace(/\s/g, '')))));
+}
+function autoMark(idxs, codes){
   let n = 0;
   for (const r of ROWS) {
-    const terms = BIZ && BIZ.docs[r.code] ? BIZ.docs[r.code].map(x => x[0]).join(' ') : '';
-    const txt = norm([r.c.product, r.c.sector, ksName(r.c.ksic), mixTxt(r.c), ST.area[r.code], terms].join(' '));
-    ST.crits.forEach((c, i) => { if (idxs && !idxs.includes(i)) return; const raw = (c.kw || '').split(',').map(x => x.trim()).filter(Boolean);
-      if (raw.some(k => txt.includes(norm(k)) || coHas(r.code, stem(k.toLowerCase().replace(/\s/g, ''))))) { const m = ST.marks[r.code] = ST.marks[r.code] || {}; if (!m[i]) { m[i] = true; n++; } } });
+    if (codes && !codes.includes(r.code)) continue;
+    critHits(r).forEach((hit, i) => { if (!hit || (idxs && !idxs.includes(i))) return; const m = ST.marks[r.code] = ST.marks[r.code] || {}; if (!m[i]) { m[i] = true; n++; } });
   }
   return n;
 }
@@ -840,7 +883,7 @@ function renderRec(){
   $$('#recBox [data-rc]').forEach(x => x.onchange = () => { const k = x.dataset.rc; ST.recCoSel = x.checked ? [...new Set([...(ST.recCoSel || []), k])] : (ST.recCoSel || []).filter(z => z !== k); save(); prev(); x.closest('tr').classList.toggle('hl', x.checked); });
   $('#recApply').onclick = async () => {
     const secs = ST.recSecSel || [];
-    ST.sectors = ST.sectors.filter(s => !s.startsWith('ksicp:')).concat(secs.map(k => 'ksicp:' + k));
+    ST.sectors = ST.sectors.filter(s => !s.startsWith('ksicp:')).concat(secs.map(k => 'ksicp:' + k)); ST.expSecs = []; ST.expBlock = []; ST.expInfo = {};
     const inSec = c => ST.sectors.some(s => secMatch(c, s));
     const extra = (ST.recCoSel || []).filter(code => BY[code] && !inSec(BY[code]));
     ST.adds = ST.adds.filter(a => !ST.recAdds.includes(a)).concat(extra.filter(a => !ST.adds.includes(a)));
@@ -1050,7 +1093,7 @@ async function buildExcel(){
   const kp = ROWS.filter(r => r.market === '코스피').length;
   const nfL = [ST.nAdmin && '평가기준일 현재 관리종목 또는 투자위험 종목으로 지정되지 않았을 것', ST.nList && `평가기준일 현재 상장후 ${ST.nListM}개월 이상 경과하였을 것`, ST.nAudit && '최근 사업연도 감사의견이 적정일 것',
     ST.nMult && `비경상적 ${m} Multiple 기업 제외(${ST.nMin}x 이상, ${ST.nMax}x 이하만 사용)`, ST.nFye && '결산월이 12월일 것'].filter(Boolean).map((t, i) => `${i + 1}) ${t}`).join('\n');
-  const prow = [['모집단 선정', '업종 유사성', `${ST.recAt ? `대상회사 사업 설명(핵심어: ${(ST.recKw || []).slice(0, 8).join(', ')})과 전 상장사의 업종·주요제품·사업보고서 사업의 개요를 비교한 사업 유사도로 추천된\n` : ''}한국표준산업분류 다음 분류에 속하는 기업 중 유가증권시장 및 코스닥시장 상장회사\n${ST.sectors.map(s => `- ${secLabel(s)}`).join('\n')}${ST.adds.length ? `\n- 업종 외 사업 유사 회사 개별 추가: ${ST.adds.map(a => (BY[a] || {}).name || a).join(', ')}` : ''}`, `코스피 ${kp}개사, 코스닥 ${ROWS.length - kp}개사로 총 ${ROWS.length}개사`],
+  const prow = [['모집단 선정', '업종 유사성', `${ST.recAt ? `대상회사 사업 설명(핵심어: ${(ST.recKw || []).slice(0, 8).join(', ')})과 전 상장사의 업종·주요제품·사업보고서 사업의 개요를 비교한 사업 유사도로 추천된\n` : ''}한국표준산업분류 다음 분류에 속하는 기업 중 유가증권시장 및 코스닥시장 상장회사\n${ST.sectors.map(s => `- ${secLabel(s)}${ST.expSecs.includes(s) ? ` (최소 Peer 확보를 위해 사업 범위 확장으로 추가: ${ST.expInfo[s] || ''})` : ''}`).join('\n')}${ST.adds.length ? `\n- 업종 외 사업 유사 회사 개별 추가: ${ST.adds.map(a => (BY[a] || {}).name || a).join(', ')}` : ''}`, `코스피 ${kp}개사, 코스닥 ${ROWS.length - kp}개사로 총 ${ROWS.length}개사`],
     ['1차', '사업 유사성', `다음 기준 중 한 가지 이상을 충족하는 회사\n${ST.crits.map((c, i) => `${i + 1}) ${c.label || '기준'}`).join('\n')}`, biz.map(r => r.name).join(', ')],
     ['2차', '재무 유사성', `${per}(최근 12개월) 간 ${finLbl.replace(' 시현', '')}을 시현하였을 것${ST.fRev ? `, 매출액 ${ST.fRevMin}억원 이상` : ''}`, biz.filter(r => r.fin === true).map(r => r.name).join(', ')],
     ['3차', '비재무적 유사성', nfL, `${F.map(r => r.name).join(', ')} ${F.length}개사 최종 선정`]];
