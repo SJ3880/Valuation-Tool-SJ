@@ -123,7 +123,7 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
   <div class="card">
     <h2>대상회사 · 평가 기준</h2>
     <div class="form">
-      <div><label class="f">대상회사명</label><input type="text" id="tName" placeholder="예: 위스텍"></div>
+      <div><label class="f">대상회사명</label><input type="text" id="tName" placeholder="예: OO테크"></div>
       <div><label class="f">평가기준일</label><input type="date" id="baseDate"></div>
       <div><label class="f">상장 예정 시장</label><select id="tMkt"><option>코스닥</option><option>코스피</option></select></div>
       <div><label class="f">상장 트랙</label><select id="tTrack"></select></div>
@@ -153,7 +153,7 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
       <h2>① 모집단 선정 — 회사 설명으로 자동 추천</h2>
       <div class="note" style="margin-top:0">대상회사가 <b>어떤 사업을 하는지</b> 적거나 <b>IR자료·회사소개서</b>(PDF·PPT·워드)를 올리면, 전 상장사의 업종·주요제품·매출비중 품목·사업보고서 '사업의 개요'와 비교해 사업이 비슷한 회사와 업종(한국표준산업분류)을 뽑아줍니다.</div>
       <label class="f" style="margin-top:10px">대상회사 사업 설명</label>
-      <textarea id="desc" rows="6" placeholder="예: 방산·위성통신용 RF 부품을 개발·생산. 주력은 레이더용 TMMR(송수신 모듈), 위성 탑재 RF 부품. 주요 고객은 LIG넥스원, 한화시스템…"></textarea>
+      <textarea id="desc" rows="6" placeholder="예: 공장 자동화용 산업 센서 모듈을 개발·생산합니다. 주력은 비전 센서와 레이저 변위 센서이며, 주요 고객은 국내 자동차·2차전지 제조사입니다."></textarea>
       <div class="rowbtns">
         <label class="btn" for="descFile">📎 IR자료·회사소개서 올리기</label><input type="file" id="descFile" accept=".pdf,.pptx,.docx,.txt,.md" multiple hidden>
         <button class="btn pri" id="recBtn">🔍 모집단 추천 받기</button>
@@ -195,7 +195,7 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
         <button class="btn sm" id="clearCrit">체크 모두 지우기</button>
       </div>
       <label class="f" style="margin-top:10px">사업 유사성 기준 설명(엑셀 'Peer 선정 과정'에 들어감)</label>
-      <textarea id="bizNote" placeholder="예: 회사는 1) TMMR 제조 분야에서 2) RF 통신 기술을 활용하는 부품을 생산…"></textarea>
+      <textarea id="bizNote" placeholder="예: 회사는 1) 산업용 센서 분야에서 2) 광학 계측 기술을 활용하는 모듈을 생산…"></textarea>
       <div class="note">O/X 칸을 눌러 바꿀 수 있어요. '관련 사업 영역'은 R 시트에 그대로 들어갑니다(비워두면 주요제품).</div>
       <div class="scroll" style="margin-top:8px"><table id="bizTbl"></table></div>
     </div>
@@ -853,7 +853,7 @@ function renderRec(){
   const T = REC.sc.slice(0, Math.max(+ST.recTop || 40, 60));
   box.innerHTML = `<div class="recgrid">
     <div><div class="rechead"><h3>핵심 키워드 <span class="x">누르면 ★중요 → 빼기 · 바꾸면 결과가 바로 다시 계산돼요</span></h3>
-      <div style="display:flex;gap:6px"><input type="text" id="kwAdd" placeholder="키워드 직접 추가(예: TMMR)" style="width:200px"><button class="btn sm" id="kwAddBtn">추가</button></div></div>
+      <div style="display:flex;gap:6px"><input type="text" id="kwAdd" placeholder="키워드 직접 추가(예: 비전 센서)" style="width:200px"><button class="btn sm" id="kwAddBtn">추가</button></div></div>
       <div class="chips">${kwH || '<span class="x">설명에서 비교할 만한 낱말을 못 찾았어요. 사업 내용을 더 구체적으로 적어 주세요.</span>'}</div></div>
     <div><div class="rechead"><h3>추천 업종(한국표준산업분류)</h3>
       <div style="display:flex;gap:6px;align-items:center"><span class="x">분류 단위</span><select id="recLv" style="width:auto"><option value="3">소분류(3자리)</option><option value="4">세분류(4자리)</option><option value="5">세세분류(5자리)</option></select>
