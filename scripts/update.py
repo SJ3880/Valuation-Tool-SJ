@@ -634,13 +634,15 @@ def update_mix(companies, dart, meta, biz):
 JOSA = sorted("하였습니다 했습니다 합니다 됩니다 입니다 하였으며 하였고 하며 되며 되고 이다 하였다 했다 으로부터 로부터 이라는 라는 에는 와의 과의 에서는 으로는 에서도 으로서 으로써 에서 으로 에게 까지 부터 이며 이고 하는 하여 하고 한다 된다 되는 되어 적인 적으로 들의 들은 들이 들을 은 는 을 를 의 에 와 과 용 및 등".split(), key=len, reverse=True)
 STOP = set("당사 회사 동사 사업 제품 서비스 기타 주요 관련 국내 해외 시장 매출 분야 부문 업체 기업 통해 위해 대한 있는 있습니다 합니다 하였습니다 있으며 경우 이상 이하 현재 당기 전기 기준 사용 제공 생산 판매 개발 제조".split())
 
+STOP_EN = set("a an the and or of to in on for with by from at as is are was were be been being it its this that these those any all some other such than then there their they we our you your he she his her not no yes can may will would should could do does did done has have had also into over under about after before between more most less new novel based using use used via per each early late pre post up out etc inc co ltd corp llc company year years deal date ipo vs ex eg ie key core global world market total part plan".split())
+
 
 def tokens(text):
     """한글은 2글자씩 끊은 조각 + 3~6글자 낱말, 영문·숫자 섞인 말은 낱말 그대로 (화면 쪽 tokens()와 똑같이)"""
     out = []
     for w in re.findall(r"[가-힣]+|[a-z0-9]+", (text or "").lower()):
         if not re.search(r"[가-힣]", w):
-            if len(w) >= 2 and not w.isdigit():
+            if len(w) >= 2 and not w.isdigit() and w not in STOP_EN:
                 out.append(w)
             continue
         h = w

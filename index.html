@@ -82,6 +82,11 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .warn{background:#2a2110;color:#e8c27a;border-color:#4d3b17}}
 .empty{padding:30px 10px;text-align:center;color:var(--mu)}
 .pill{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;background:var(--accent);color:#fff;vertical-align:middle}
+details.card>summary{cursor:pointer;list-style:none;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary::before{content:'▸';transition:transform .15s}
+details.card[open]>summary::before{transform:rotate(90deg)}
+details.card[open]>summary{margin-bottom:12px}
 .kw{cursor:pointer;user-select:none;padding:3px 10px}
 .kw.boost{background:var(--accent);color:#fff}
 .kw.off{text-decoration:line-through;opacity:.45}
@@ -150,10 +155,10 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
   <!-- ① 모집단 -->
   <div class="pane" id="p-pop">
     <div class="card">
-      <h2>① 모집단 선정 — 회사 설명으로 자동 추천</h2>
-      <div class="note" style="margin-top:0">대상회사가 <b>어떤 사업을 하는지</b> 적거나 <b>IR자료·회사소개서</b>(PDF·PPT·워드)를 올리면, 전 상장사의 업종·주요제품·매출비중 품목·사업보고서 '사업의 개요'와 비교해 사업이 비슷한 회사와 업종(한국표준산업분류)을 뽑아줍니다.</div>
-      <label class="f" style="margin-top:10px">대상회사 사업 설명</label>
-      <textarea id="desc" rows="6" placeholder="예: 공장 자동화용 산업 센서 모듈을 개발·생산합니다. 주력은 비전 센서와 레이저 변위 센서이며, 주요 고객은 국내 자동차·2차전지 제조사입니다."></textarea>
+      <h2>① 모집단 선정 <span class="x">사업 설명이나 IR자료를 넣으면 비슷한 회사·업종을 추천해요. 체크만 바꾸면 모집단이 바로 바뀌어요</span></h2>
+      <div class="note" style="margin-top:0;display:none">대상회사가 <b>어떤 사업을 하는지</b> 적거나 <b>IR자료·회사소개서</b>(PDF·PPT·워드)를 올리면, 전 상장사의 업종·주요제품·매출비중 품목·사업보고서 '사업의 개요'와 비교해 사업이 비슷한 회사와 업종(한국표준산업분류)을 뽑아줍니다.</div>
+      <label class="f" style="margin-top:6px">대상회사 사업 설명</label>
+      <textarea id="desc" rows="4" placeholder="예: 공장 자동화용 산업 센서 모듈을 개발·생산합니다. 주력은 비전 센서와 레이저 변위 센서이며, 주요 고객은 국내 자동차·2차전지 제조사입니다."></textarea>
       <div class="rowbtns">
         <label class="btn" for="descFile">📎 IR자료·회사소개서 올리기</label><input type="file" id="descFile" accept=".pdf,.pptx,.docx,.txt,.md" multiple hidden>
         <button class="btn pri" id="recBtn">🔍 모집단 추천 받기</button>
@@ -162,8 +167,8 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
       </div>
       <div id="recBox"></div>
     </div>
-    <div class="card">
-      <h2>모집단 직접 조정 <span class="x">추천 결과에 업종·회사를 더하거나 빼기</span></h2>
+    <details class="card" id="popMore">
+      <summary><b>✏️ 직접 조정 · 모집단 회사 목록</b> <span class="x" id="popMoreSum"></span></summary>
       <div class="form">
         <div class="search" style="grid-column:span 2"><label class="f">업종(한국표준산업분류) 검색해서 추가</label>
           <input type="text" id="secQ" placeholder="표준산업분류 코드(예: C26299) 또는 업종명(예: 통신 및 방송 장비)" autocomplete="off"><div class="sugg" id="secSugg" hidden></div></div>
@@ -178,8 +183,8 @@ button.ox{border:0;font:inherit;font-weight:700;cursor:pointer}
       </div>
       <div class="chips" id="addChips"></div>
       <div class="note" id="popSum"></div>
-      <div class="scroll" style="margin-top:8px"><table id="popTbl"></table></div>
-    </div>
+      <div class="scroll" style="margin-top:8px;max-height:520px"><table id="popTbl"></table></div>
+    </details>
   </div>
 
   <!-- ② 1차 -->
@@ -560,13 +565,16 @@ const mixTxt = c => (c.mix || []).map(m => `${m.n}(${m.p}%)`).join(', ');
 function renderPop(){
   $('#secChips').innerHTML = ST.sectors.map(s => { const k = secKey(s); const n = COMP.filter(c => secMatch(c, k)).length;
     return `<span class="chip">${k.startsWith('kind:') ? '<span class="x">KIND 업종</span> ' : ''}${esc(secLabel(s))}${k.startsWith('ksicp:') ? ' <span class="x">(하위 포함)</span>' : ''} <span class="x">${n}개</span>${ST.expSecs.includes(s) ? ` <span class="pill" title="${esc(ST.expInfo[s] || '최소 Peer 확보를 위한 사업 범위 확장')}">확장</span>` : ''}<button data-x="${esc(s)}">×</button></span>`; }).join('') +
-    (ST.expSecs.some(s => ST.sectors.includes(s)) ? `<div class="note" style="width:100%">‘확장’ 업종: 최종 Peer가 최소 ${ST.minPeers}개에 못 미쳐, 사업이 비슷하고 2·3차를 통과하는 회사의 업종을 모집단에 넣었어요 — ${ST.expSecs.filter(s => ST.sectors.includes(s)).map(s => esc(`${secLabel(s)}: ${ST.expInfo[s] || ''}`)).join(' · ')}. ×로 빼면 다시 넣지 않아요.</div>` : '');
+    (ST.expSecs.some(s => ST.sectors.includes(s)) ? `<div class="note" style="width:100%">‘확장’ = 최종 Peer ${ST.minPeers}개를 맞추려고 추가한 업종(표시에 마우스를 올리면 이유가 보여요)</div>` : '');
   $$('#secChips [data-x]').forEach(b => b.onclick = () => { const x = b.dataset.x; ST.sectors = ST.sectors.filter(s => s !== x); if (ST.expSecs.includes(x) && !ST.expBlock.includes(x)) ST.expBlock.push(x); save(); refresh(); });
   $('#addChips').innerHTML = ST.adds.map(a => `<span class="chip">+ ${esc((BY[a] || {}).name || a)}${ST.recAdds.includes(a) ? ' <span class="x">추천</span>' : ''}<button data-x="${esc(a)}">×</button></span>`).join('') +
     ST.drops.map(a => `<span class="chip" style="text-decoration:line-through">${esc((BY[a] || {}).name || a)}<button data-u="${esc(a)}" title="다시 넣기">↺</button></span>`).join('');
   $$('#addChips [data-x]').forEach(b => b.onclick = () => { ST.adds = ST.adds.filter(s => s !== b.dataset.x); save(); refresh(); });
   $$('#addChips [data-u]').forEach(b => b.onclick = () => { ST.drops = ST.drops.filter(s => s !== b.dataset.u); save(); refresh(); });
   const kp = ROWS.filter(r => r.market === '코스피').length, kq = ROWS.filter(r => r.market === '코스닥').length;
+  $('#popMoreSum').textContent = ROWS.length ? `— 업종 검색·회사 추가/제외, 전체 ${ROWS.filter(r => !r.ext).length}개사 보기` : '— 업종을 직접 검색해서 모집단 만들기';
+  if (!REC && !ROWS.length) $('#popMore').open = true;
+  recStatus();
   $('#popSum').innerHTML = ROWS.length ? `<b>코스피 ${kp}개사, 코스닥 ${kq}개사로 총 ${ROWS.length}개사</b>` : '위에서 회사 설명으로 추천을 받거나, 업종을 검색해서 모집단을 만드세요.';
   $('#popTbl').innerHTML = ROWS.length ? `<tr><th class="l nm">회사</th><th class="l">시장</th>${REC ? '<th>사업 유사도</th>' : ''}<th class="l">업종</th><th class="l">주요제품(KIND)</th><th>상장일</th><th>결산월</th><th class="l">데이터</th><th></th></tr>` +
     ROWS.map(r => `<tr><td class="l nm">${esc(r.name)}<div class="x">${esc(r.code)}</div></td><td class="l">${esc(r.market)}</td>${REC ? `<td>${simCell(r.code)}</td>` : ''}<td class="l small">${r.c.ksic ? `C${esc(r.c.ksic)} ` : ''}${esc(ksName(r.c.ksic) || r.c.sector || '')}</td><td class="l wrap small">${esc(r.c.product || '')}</td>
@@ -789,10 +797,11 @@ suggest($('#coQ'), $('#coSugg'), q => { q = norm(q); if (!q) return []; const h 
    회사 설명 → 낱말 조각(한글 2글자씩 + 3~6글자 낱말, 영문 낱말) → 사업보고서·주요제품 색인(TF-IDF)과 코사인 유사도.
    tokens()는 scripts/update.py 의 tokens()와 똑같이 맞춰야 함 */
 const JOSA = '하였습니다 했습니다 합니다 됩니다 입니다 하였으며 하였고 하며 되며 되고 이다 하였다 했다 으로부터 로부터 이라는 라는 에는 와의 과의 에서는 으로는 에서도 으로서 으로써 에서 으로 에게 까지 부터 이며 이고 하는 하여 하고 한다 된다 되는 되어 적인 적으로 들의 들은 들이 들을 은 는 을 를 의 에 와 과 용 및 등'.split(' ').sort((a, b) => b.length - a.length);
+const STOPW_EN = new Set('a an the and or of to in on for with by from at as is are was were be been being it its this that these those any all some other such than then there their they we our you your he she his her not no yes can may will would should could do does did done has have had also into over under about after before between more most less new novel based using use used via per each early late pre post up out etc inc co ltd corp llc company year years deal date ipo vs ex eg ie key core global world market total part plan'.split(' '));
 const STOPW = new Set('당사 회사 동사 사업 제품 서비스 기타 주요 관련 국내 해외 시장 매출 분야 부문 업체 기업 통해 위해 대한 있는 있습니다 합니다 하였습니다 있으며 경우 이상 이하 현재 당기 전기 기준 사용 제공 생산 판매 개발 제조'.split(' '));
 function stem(w){ for (const j of JOSA) if (w.endsWith(j) && w.length - j.length >= 2) return w.slice(0, -j.length); return w; }
 function words(text){ const out = []; for (const w of (String(text || '').replace(/^\[[^\]\n]*\]$/gm, ' ').toLowerCase().match(/[가-힣]+|[a-z0-9]+/g) || [])) {
-    if (!/[가-힣]/.test(w)) { if (w.length >= 2 && !/^\d+$/.test(w)) out.push(w); continue; }
+    if (!/[가-힣]/.test(w)) { if (w.length >= 2 && !/^\d+$/.test(w) && !STOPW_EN.has(w)) out.push(w); continue; }
     const h = stem(w); if (h.length >= 2 && !STOPW.has(h)) out.push(h); } return out; }
 function tokens(text){ const out = []; for (const h of words(text)) {
     if (!/[가-힣]/.test(h)) { out.push(h); continue; }
@@ -843,6 +852,34 @@ function hitWords(x){   // 회사 쪽에서 낱말이 통째로(또는 조각이
   const qw = [...new Set((REC.kws || []).map(k => k.w).concat(ST.kwPlus.map(k => stem(k.toLowerCase().replace(/\s/g, '')))))];
   return qw.filter(w => ST.kwAdj[w] !== 0 && (got.has(w) || (/[가-힣]/.test(w) && w.length > 2 && piecesOf(w).slice(1).every(t => got.has(t))))).slice(0, 6); }
 const coHas = (code, w) => { const d = BIZ && BIZ.docs[code]; if (!d) return false; const got = new Set(d.map(x => x[0])); return got.has(w) || (/[가-힣]/.test(w) && w.length > 2 && piecesOf(w).slice(1).every(t => got.has(t))); };
+/* 추천에서 체크한 업종·회사 = 모집단(체크를 바꾸면 바로 반영). withCrits: ② 1차 기준 초안도 다시 잡기 */
+let APPLY_TIMER = null, APPLY_CRITS = false;
+const applyRecSoon = (withCrits) => { APPLY_CRITS = APPLY_CRITS || withCrits; clearTimeout(APPLY_TIMER); APPLY_TIMER = setTimeout(() => { const w = APPLY_CRITS; APPLY_CRITS = false; applyRec(w); }, 350); };
+async function applyRec(withCrits){
+  if (!REC) return;
+  const secs = ST.recSecSel || [];
+  ST.sectors = ST.sectors.filter(s => !s.startsWith('ksicp:')).concat(secs.map(k => 'ksicp:' + k)); ST.expSecs = []; ST.expBlock = []; ST.expInfo = {};
+  const inSec = c => ST.sectors.some(s => secMatch(c, s));
+  const extra = (ST.recCoSel || []).filter(code => BY[code] && !inSec(BY[code]));
+  const base = ST.adds.filter(a => !ST.recAdds.includes(a));
+  ST.adds = base.concat(extra.filter(a => !base.includes(a)));
+  ST.recAdds = extra; ST.drops = ST.drops.filter(d => !(ST.recCoSel || []).includes(d));
+  ST.recAt = new Date().toISOString().slice(0, 10);
+  const before = new Set(ROWS.map(r => r.code));
+  $('#recPrev').innerHTML = '<span class="x">모집단 반영 중…</span>';
+  await refresh();
+  if (withCrits || !ST.crits.some(c => c.label || c.kw)) applyAutoCrits();
+  else autoMark(null, ROWS.filter(r => !before.has(r.code)).map(r => r.code));   // 새로 들어온 회사만 1차 키워드 체크
+  save(); renderBiz(); refreshLight(); recStatus();
+}
+function recStatus(){
+  const el = $('#recPrev'); if (!el) return;
+  const n = ROWS.filter(r => !r.ext).length, kp = ROWS.filter(r => !r.ext && r.market === '코스피').length;
+  const nc = ST.crits.filter(c => c.auto).length;
+  el.innerHTML = n ? `<b>✔ 모집단 ${n}개사</b><span class="x">(코스피 ${kp} · 코스닥 ${n - kp} · 업종 ${ST.sectors.length}개${ST.adds.length ? ` + 개별 ${ST.adds.length}개사` : ''})</span>${nc ? `<span class="x">· ② 1차 기준 ${nc}개 자동 설정</span>` : ''}
+    <button class="btn sm" id="goBiz">② 1차로 →</button>` : '<span class="x">업종이나 회사를 체크하면 모집단이 만들어져요.</span>';
+  const gb = $('#goBiz'); if (gb) gb.onclick = () => { showStep('biz'); scrollTo({ top: $('#steps').offsetTop - 10, behavior: 'smooth' }); };
+}
 function renderRec(){
   const box = $('#recBox');
   if (!BIZ) { box.innerHTML = '<div class="note">추천용 색인(data/biz.json)을 아직 만들지 못했어요. 다음 자동 업데이트 뒤에 쓸 수 있어요.</div>'; return; }
@@ -850,49 +887,35 @@ function renderRec(){
   const secSel = new Set(ST.recSecSel || []), coSel = new Set(ST.recCoSel || []);
   const kwH = REC.kws.map(k => { const v = ST.kwAdj[k.w]; return `<span class="chip kw ${v === 2 ? 'boost' : v === 0 ? 'off' : ''}" data-kw="${esc(k.w)}" title="누를 때마다: 보통 → ★중요(2배) → 빼기">${v === 2 ? '★ ' : ''}${esc(k.w)}</span>`; }).join('') +
     ST.kwPlus.map((k, i) => `<span class="chip kw boost">＋ ${esc(k)}<button data-kp="${i}">×</button></span>`).join('');
-  const T = REC.sc.slice(0, Math.max(+ST.recTop || 40, 60));
+  const T = REC.sc.slice(0, Math.max(+ST.recN || 20, 40));
   box.innerHTML = `<div class="recgrid">
-    <div><div class="rechead"><h3>핵심 키워드 <span class="x">누르면 ★중요 → 빼기 · 바꾸면 결과가 바로 다시 계산돼요</span></h3>
+    <div><div class="rechead"><h3>핵심 키워드 <span class="x">누르면 ★중요 → 빼기</span></h3>
       <div style="display:flex;gap:6px"><input type="text" id="kwAdd" placeholder="키워드 직접 추가(예: 비전 센서)" style="width:200px"><button class="btn sm" id="kwAddBtn">추가</button></div></div>
       <div class="chips">${kwH || '<span class="x">설명에서 비교할 만한 낱말을 못 찾았어요. 사업 내용을 더 구체적으로 적어 주세요.</span>'}</div></div>
     <div><div class="rechead"><h3>추천 업종(한국표준산업분류)</h3>
       <div style="display:flex;gap:6px;align-items:center"><span class="x">분류 단위</span><select id="recLv" style="width:auto"><option value="3">소분류(3자리)</option><option value="4">세분류(4자리)</option><option value="5">세세분류(5자리)</option></select>
       <span class="x">유사 상위</span><input type="number" id="recTop" value="${esc(ST.recTop)}" min="10" max="200" style="width:64px"><span class="x">개사 기준</span></div></div>
-      <div class="scroll" style="max-height:330px"><table><tr><th class="c">선택</th><th class="l">표준산업분류</th><th>유사 상위 ${ST.recTop}개사 중</th><th>업종 상장사 수</th><th class="l">추천 점수</th><th class="l">유사 회사 예</th></tr>
-      ${REC.secs.slice(0, 15).map(a => `<tr class="${secSel.has(a.k) ? 'hl' : ''}"><td class="c"><input type="checkbox" data-rs="${esc(a.k)}" ${secSel.has(a.k) ? 'checked' : ''}></td><td class="l"><b>C${esc(a.k)}</b> ${esc(ksName(a.k))}</td>
+      <div class="scroll" style="max-height:300px"><table><tr><th class="c">선택</th><th class="l">표준산업분류</th><th>유사 상위 ${ST.recTop}개사 중</th><th>업종 상장사 수</th><th class="l">추천 점수</th><th class="l">유사 회사 예</th></tr>
+      ${REC.secs.slice(0, 10).map(a => `<tr class="${secSel.has(a.k) ? 'hl' : ''}"><td class="c"><input type="checkbox" data-rs="${esc(a.k)}" ${secSel.has(a.k) ? 'checked' : ''}></td><td class="l"><b>C${esc(a.k)}</b> ${esc(ksName(a.k))}</td>
         <td>${a.n}개사</td><td>${a.members}개사</td><td class="l"><span class="bar" style="width:${Math.max(2, a.share * 120)}px"></span>${fmt(a.share * 100, 0)}%</td><td class="l small">${esc(a.names.join(', '))}</td></tr>`).join('')}</table></div></div>
     <div><div class="rechead"><h3>사업이 비슷한 상장사 <span class="x">유사도: 1위 = 100</span></h3>
       <div style="display:flex;gap:6px;align-items:center"><span class="x">상위</span><input type="number" id="recN" value="${esc(ST.recN)}" min="0" max="200" style="width:64px"><span class="x">개사 선택</span></div></div>
-      <div class="scroll" style="max-height:420px"><table><tr><th class="c">선택</th><th>순위</th><th class="l nm">회사</th><th class="l">시장</th><th>유사도</th><th class="l">겹치는 키워드</th><th class="l">표준산업분류</th><th class="l">주요제품(KIND)</th></tr>
+      <div class="scroll" style="max-height:360px"><table><tr><th class="c">선택</th><th>순위</th><th class="l nm">회사</th><th class="l">시장</th><th>유사도</th><th class="l">겹치는 키워드</th><th class="l">표준산업분류</th><th class="l">주요제품(KIND)</th></tr>
       ${T.map((x, i) => { const c = BY[x.code]; return `<tr class="${coSel.has(x.code) ? 'hl' : ''}"><td class="c"><input type="checkbox" data-rc="${esc(x.code)}" ${coSel.has(x.code) ? 'checked' : ''}></td><td>${i + 1}</td><td class="l nm">${esc(c.name)}<div class="x">${esc(c.code)}</div></td><td class="l">${esc(c.market)}</td>
         <td>${simCell(x.code)}</td><td class="l small">${esc(hitWords(x).join(', '))}</td><td class="l small">${c.ksic ? `C${esc(c.ksic)} ${esc(ksName(c.ksic))}` : ''}</td><td class="l wrap small">${esc(c.product || '')}</td></tr>`; }).join('')}</table></div></div>
-    <div class="rowbtns"><button class="btn pri" id="recApply">✔ 선택한 업종 + 회사로 모집단 만들기</button><span class="x" id="recPrev"></span></div>
+    <div class="rowbtns" id="recPrev"></div>
   </div>`;
   $('#recLv').value = String(ST.recLv);
-  const prev = () => { const secs = [...(ST.recSecSel || [])], set = new Set(COMP.filter(c => secs.some(k => secMatch(c, 'ksicp:' + k)) && ((c.market === '코스피' && ST.mKospi) || (c.market === '코스닥' && ST.mKosdaq))).map(c => c.code));
-    const extra = (ST.recCoSel || []).filter(c => !set.has(c)); $('#recPrev').textContent = `→ 업종 ${secs.length}개(${set.size}개사) + 업종 밖 유사회사 ${extra.length}개사 = 모집단 약 ${set.size + extra.length}개사`; };
-  prev();
-  $$('#recBox [data-kw]').forEach(b => b.onclick = () => { const w = b.dataset.kw, v = ST.kwAdj[w]; if (v == null) ST.kwAdj[w] = 2; else if (v === 2) ST.kwAdj[w] = 0; else delete ST.kwAdj[w]; runRec(true); save(); renderRec(); });
-  $$('#recBox [data-kp]').forEach(b => b.onclick = e => { e.stopPropagation(); ST.kwPlus.splice(+b.dataset.kp, 1); runRec(true); save(); renderRec(); });
-  const addKw = () => { const v = $('#kwAdd').value.trim(); if (!v) return; v.split(',').map(x => x.trim()).filter(Boolean).forEach(x => { if (!ST.kwPlus.includes(x)) ST.kwPlus.push(x); }); runRec(true); save(); renderRec(); };
+  recStatus();
+  $$('#recBox [data-kw]').forEach(b => b.onclick = () => { const w = b.dataset.kw, v = ST.kwAdj[w]; if (v == null) ST.kwAdj[w] = 2; else if (v === 2) ST.kwAdj[w] = 0; else delete ST.kwAdj[w]; runRec(true); save(); renderRec(); applyRecSoon(true); });
+  $$('#recBox [data-kp]').forEach(b => b.onclick = e => { e.stopPropagation(); ST.kwPlus.splice(+b.dataset.kp, 1); runRec(true); save(); renderRec(); applyRecSoon(true); });
+  const addKw = () => { const v = $('#kwAdd').value.trim(); if (!v) return; v.split(',').map(x => x.trim()).filter(Boolean).forEach(x => { if (!ST.kwPlus.includes(x)) ST.kwPlus.push(x); }); runRec(true); save(); renderRec(); applyRecSoon(true); };
   $('#kwAddBtn').onclick = addKw; $('#kwAdd').onkeydown = e => { if (e.key === 'Enter') addKw(); };
-  $('#recLv').onchange = e => { ST.recLv = +e.target.value; runRec(true); save(); renderRec(); };
-  $('#recTop').onchange = e => { ST.recTop = Math.max(10, +e.target.value || 40); runRec(true); save(); renderRec(); };
-  $('#recN').onchange = e => { ST.recN = Math.max(0, +e.target.value || 0); ST.recCoSel = REC.sc.slice(0, ST.recN).map(x => x.code); save(); renderRec(); };
-  $$('#recBox [data-rs]').forEach(x => x.onchange = () => { const k = x.dataset.rs; ST.recSecSel = x.checked ? [...new Set([...(ST.recSecSel || []), k])] : (ST.recSecSel || []).filter(z => z !== k); save(); renderRec(); });
-  $$('#recBox [data-rc]').forEach(x => x.onchange = () => { const k = x.dataset.rc; ST.recCoSel = x.checked ? [...new Set([...(ST.recCoSel || []), k])] : (ST.recCoSel || []).filter(z => z !== k); save(); prev(); x.closest('tr').classList.toggle('hl', x.checked); });
-  $('#recApply').onclick = async () => {
-    const secs = ST.recSecSel || [];
-    ST.sectors = ST.sectors.filter(s => !s.startsWith('ksicp:')).concat(secs.map(k => 'ksicp:' + k)); ST.expSecs = []; ST.expBlock = []; ST.expInfo = {};
-    const inSec = c => ST.sectors.some(s => secMatch(c, s));
-    const extra = (ST.recCoSel || []).filter(code => BY[code] && !inSec(BY[code]));
-    ST.adds = ST.adds.filter(a => !ST.recAdds.includes(a)).concat(extra.filter(a => !ST.adds.includes(a)));
-    ST.recAdds = extra; ST.drops = ST.drops.filter(d => !(ST.recCoSel || []).includes(d));
-    ST.recAt = new Date().toISOString().slice(0, 10); save(); await refresh();
-    const nc = applyAutoCrits(); save(); renderBiz(); refreshLight();
-    $('#recPrev').innerHTML = `✔ 모집단을 만들었어요${nc ? ` · ② 1차 사업 유사성 기준 ${nc}개도 자동으로 잡아 뒀어요 <button class="btn sm" id="goBiz">② 1차 기준 보기 →</button>` : ''}`;
-    const gb = $('#goBiz'); if (gb) gb.onclick = () => { showStep('biz'); scrollTo({ top: $('#steps').offsetTop - 10, behavior: 'smooth' }); };
-  };
+  $('#recLv').onchange = e => { ST.recLv = +e.target.value; runRec(true); save(); renderRec(); applyRecSoon(true); };
+  $('#recTop').onchange = e => { ST.recTop = Math.max(10, +e.target.value || 40); runRec(true); save(); renderRec(); applyRecSoon(true); };
+  $('#recN').onchange = e => { ST.recN = Math.max(0, +e.target.value || 0); ST.recCoSel = REC.sc.slice(0, ST.recN).map(x => x.code); save(); renderRec(); applyRecSoon(false); };
+  $$('#recBox [data-rs]').forEach(x => x.onchange = () => { const k = x.dataset.rs; ST.recSecSel = x.checked ? [...new Set([...(ST.recSecSel || []), k])] : (ST.recSecSel || []).filter(z => z !== k); save(); x.closest('tr').classList.toggle('hl', x.checked); applyRecSoon(false); });
+  $$('#recBox [data-rc]').forEach(x => x.onchange = () => { const k = x.dataset.rc; ST.recCoSel = x.checked ? [...new Set([...(ST.recCoSel || []), k])] : (ST.recCoSel || []).filter(z => z !== k); save(); x.closest('tr').classList.toggle('hl', x.checked); applyRecSoon(false); });
 }
 async function loadScript(src, glob){ if (window[glob]) return window[glob];
   await new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error('모듈을 불러오지 못했어요')); document.head.appendChild(s); }); return window[glob]; }
@@ -921,7 +944,7 @@ function bindRec(){
   const d = $('#desc'); d.value = ST.desc || '';
   d.addEventListener('input', () => { ST.desc = d.value; save(); });
   $('#recBtn').onclick = async () => { ST.desc = d.value; if (!ST.desc.trim() && !ST.kwPlus.length) { $('#fileMsg').textContent = '사업 설명을 먼저 적거나 자료를 올려 주세요.'; return; }
-    runRec(true); ST.recAt = ST.recAt || ''; save(); renderRec(); compute(); renderPop(); renderBizTable(); $('#recBox').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    runRec(true); save(); renderRec(); $('#popMore').open = false; $('#recBox').scrollIntoView({ behavior: 'smooth', block: 'start' }); await applyRec(true); };
   $('#descClear').onclick = () => { d.value = ST.desc = ''; ST.kwAdj = {}; ST.kwPlus = []; REC = null; SIM = {}; ST.recSecSel = ST.recCoSel = null; save(); renderRec(); refreshLight(); };
   $('#descFile').onchange = async e => {
     const files = [...e.target.files]; e.target.value = '';
