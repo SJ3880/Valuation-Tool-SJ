@@ -87,6 +87,16 @@ details.card>summary::-webkit-details-marker{display:none}
 details.card>summary::before{content:'▸';transition:transform .15s}
 details.card[open]>summary::before{transform:rotate(90deg)}
 details.card[open]>summary{margin-bottom:12px}
+.critcard{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.crithead{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.critno{flex:none;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.critlbl{flex:1;min-width:0;font-weight:700;font-size:14px;border:1px solid transparent;background:transparent;padding:4px 6px;border-radius:6px;color:inherit}
+.critlbl:hover,.critlbl:focus{border-color:var(--line);background:var(--bg)}
+.critn{flex:none;font-size:12px;color:var(--mu)}
+.kwin{width:120px;border:1px dashed var(--line);background:transparent;border-radius:999px;padding:3px 10px;font-size:12px;color:inherit}
+.critadd{display:flex;gap:6px;margin-top:4px}.critadd input{flex:1}
+.sugchip{cursor:pointer;border:1px dashed var(--accent)}
+.ox.man{text-decoration:underline;text-underline-offset:3px;font-weight:800}
 .kw{cursor:pointer;user-select:none;padding:3px 10px}
 .kw.boost{background:var(--accent);color:#fff}
 .kw.off{text-decoration:line-through;opacity:.45}
@@ -155,12 +165,10 @@ details.card[open]>summary{margin-bottom:12px}
   <!-- ① 모집단 -->
   <div class="pane" id="p-pop">
     <div class="card">
-      <h2>① 모집단 선정 <span class="x">사업 설명이나 IR자료를 넣으면 비슷한 회사·업종을 추천해요. 체크만 바꾸면 모집단이 바로 바뀌어요</span></h2>
-      <div class="note" style="margin-top:0;display:none">대상회사가 <b>어떤 사업을 하는지</b> 적거나 <b>IR자료·회사소개서</b>(PDF·PPT·워드)를 올리면, 전 상장사의 업종·주요제품·매출비중 품목·사업보고서 '사업의 개요'와 비교해 사업이 비슷한 회사와 업종(한국표준산업분류)을 뽑아줍니다.</div>
+      <h2>① 모집단 선정 <span class="x">회사가 하는 사업을 직접 적으면 비슷한 회사·업종을 추천해요. 체크만 바꾸면 모집단이 바로 바뀌어요</span></h2>
       <label class="f" style="margin-top:6px">대상회사 사업 설명</label>
-      <textarea id="desc" rows="4" placeholder="예: 공장 자동화용 산업 센서 모듈을 개발·생산합니다. 주력은 비전 센서와 레이저 변위 센서이며, 주요 고객은 국내 자동차·2차전지 제조사입니다."></textarea>
+      <textarea id="desc" rows="4" maxlength="1500" placeholder="예: 공장 자동화용 산업 센서 모듈을 개발·생산합니다. 주력은 비전 센서와 레이저 변위 센서이며, 주요 고객은 국내 자동차·2차전지 제조사입니다.  ※ IR자료·회사소개서 원문은 붙여넣지 말고, 사업 내용을 직접 요약해서 적어 주세요(최대 1,500자)."></textarea>
       <div class="rowbtns">
-        <label class="btn" for="descFile">📎 IR자료·회사소개서 올리기</label><input type="file" id="descFile" accept=".pdf,.pptx,.docx,.txt,.md" multiple hidden>
         <button class="btn pri" id="recBtn">🔍 모집단 추천 받기</button>
         <button class="btn sm" id="descClear">설명 지우기</button>
         <span class="x" id="fileMsg"></span>
@@ -190,18 +198,16 @@ details.card[open]>summary{margin-bottom:12px}
   <!-- ② 1차 -->
   <div class="pane" id="p-biz">
     <div class="card">
-      <h2>② 1차 — 사업 유사성 <span class="x">아래 기준 중 한 가지 이상 충족</span></h2>
-      <div class="note" id="critNote" style="margin-top:0"></div>
+      <h2>② 1차 — 사업 유사성 <span class="x">아래 기준 중 하나라도 맞으면 통과 · 키워드가 회사 주요제품·매출비중·사업보고서에 있으면 자동으로 O</span></h2>
       <div id="crits"></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-        <button class="btn sm" id="addCrit">+ 기준 추가</button>
-        <button class="btn sm" id="kwCrit" title="① 회사 설명을 보고 기준 초안을 다시 만들어요(직접 고친 기준은 그대로 둠)">↻ 회사 설명으로 기준 다시 만들기</button>
-        <button class="btn sm" id="autoCrit" title="각 기준의 키워드가 주요제품·매출비중·업종·사업보고서 핵심어에 들어 있으면 O로 표시(기존 표시는 유지)">키워드로 자동 체크</button>
-        <button class="btn sm" id="clearCrit">체크 모두 지우기</button>
+      <div class="critadd">
+        <input type="text" id="critNew" placeholder="새 기준 키워드 입력 후 Enter (예: ADC, 표적단백질분해) · 쉼표로 여러 개">
+        <button class="btn pri sm" id="critNewBtn">+ 기준 추가</button>
       </div>
+      <div id="critSug"></div>
       <label class="f" style="margin-top:10px">사업 유사성 기준 설명(엑셀 'Peer 선정 과정'에 들어감)</label>
       <textarea id="bizNote" placeholder="예: 회사는 1) 산업용 센서 분야에서 2) 광학 계측 기술을 활용하는 모듈을 생산…"></textarea>
-      <div class="note">O/X 칸을 눌러 바꿀 수 있어요. '관련 사업 영역'은 R 시트에 그대로 들어갑니다(비워두면 주요제품).</div>
+      <div class="note">표의 O/X를 누르면 그 칸만 직접 바꿀 수 있어요(직접 바꾼 칸은 밑줄). <button class="btn sm" id="ovReset">직접 바꾼 O/X 되돌리기</button> · '관련 사업 영역'은 R 시트에 들어가요(비우면 주요제품).</div>
       <div class="scroll" style="margin-top:8px"><table id="bizTbl"></table></div>
     </div>
   </div>
@@ -303,12 +309,16 @@ $('#tTrack').innerHTML = TRACKS.map(t => `<option>${t}</option>`).join('');
 const DEF = () => ({ tName: '', baseDate: '', tMkt: '코스닥', tTrack: '일반', method: 'per', pxMode: 'min3', earnMode: 'ltm', unit: '1e6',
   sectors: [], mKospi: true, mKosdaq: true, adds: [], drops: [],
   desc: '', kwAdj: {}, kwPlus: [], recLv: 4, recN: 20, recTop: 40, recSecSel: null, recCoSel: null, recAdds: [], recAt: '', recKw: [],
-  crits: [{ label: '', kw: '' }], marks: {}, area: {}, bizNote: '', minPeers: 2, expSecs: [], expBlock: [], expInfo: {},
+  crits: [], marks: {}, markOv: {}, area: {}, bizNote: '', minPeers: 2, expSecs: [], expBlock: [], expInfo: {},
   fOp: true, fNi: true, fEb: false, fRev: false, fRevMin: 0,
   nAdmin: true, nList: true, nListM: 6, nAudit: true, nFye: true, nMult: true, nMin: 10, nMax: 50, risk: {}, ov: {},
   dMode: 'last1', dN: 5, dSince: '2023-01-01', dLo: '', dHi: '', dManual: false,
   appMult: '', tEarn: '', tNd: 0, tSh: '', step: 'pop' });
 let ST = Object.assign(DEF(), LS.get('state', {}));
+(() => {   // 예전 저장 형식 → 기준에 id, 빈 기준 제거(예전 O/X 표시는 이제 키워드로 자동 계산)
+  ST.crits = (ST.crits || []).filter(c => c && (c.label || c.kw)).map(c => ({ ...c, id: c.id || Math.random().toString(36).slice(2, 9) }));
+  ST.marks = {};
+})();
 const save = () => LS.set('state', ST);
 let COMP = [], BY = {}, META = {}, DISC = [], CACHE = {}, SECTORS = [], BIZ = null, KS = {}, REC = null, SIM = {};
 
@@ -423,8 +433,9 @@ function calc(code){
   }
   r.mult = { per: r.per, psr: r.psr, ev: r.evx, pbr: r.pbr }[ST.method];
   // 1차
-  const mk = ST.marks[code] || {};
-  r.crit = ST.crits.map((_, i) => !!mk[i]);
+  const mov = ST.markOv[code] || {}, hits = critHits(r);
+  r.critAuto = hits;
+  r.crit = ST.crits.map((c, i) => mov[c.id] != null ? mov[c.id] : hits[i]);   // 키워드로 자동 O/X, 직접 누른 칸은 그 값
   r.biz = r.crit.some(Boolean);
   // 2차
   const fr = [];
@@ -583,25 +594,47 @@ function renderPop(){
   $$('#popTbl [data-drop]').forEach(b => b.onclick = () => { ST.drops.push(b.dataset.drop); ST.adds = ST.adds.filter(a => a !== b.dataset.drop); save(); refresh(); });
 }
 /* ---------------- ② 1차 ---------------- */
+const newId = () => Math.random().toString(36).slice(2, 9);
+const kwList = c => (c.kw || '').split(',').map(x => x.trim()).filter(Boolean);
+const critName = c => c.label || (kwList(c)[0] ? `${kwList(c)[0]} 관련 사업 영위` : '새 기준');
 function renderBiz(){
-  $('#critNote').innerHTML = ST.crits.some(c => c.auto) ? `<b>자동</b> 표시된 기준은 ① 회사 설명을 보고 사이트가 먼저 잡은 초안이에요. 아니다 싶으면 이름·키워드를 고치거나 ×로 지우고, <b>키워드로 자동 체크</b>를 다시 누르세요(고친 기준은 '다시 만들기'를 해도 그대로 남아요).`
-    : (REC ? '' : '① 모집단에서 회사 설명으로 추천을 받으면 기준 초안이 자동으로 채워져요. 직접 적어도 돼요.');
-  $('#crits').innerHTML = ST.crits.map((c, i) => `<div class="crit"><b>${i + 1})${c.auto ? ' <span class="pill" title="자동으로 만든 기준">자동</span>' : ''}</b><input type="text" data-cl="${i}" value="${esc(c.label)}" placeholder="기준 이름 (예: RF 통신 사업 영위)">
-    <input type="text" data-ck="${i}" value="${esc(c.kw)}" placeholder="자동 체크 키워드(쉼표로 구분, 예: RF, 안테나, 중계기)"><button class="btn sm" data-cd="${i}" title="기준 삭제">×</button></div>`).join('');
-  $$('#crits [data-cl]').forEach(x => x.oninput = () => { const c = ST.crits[+x.dataset.cl]; c.label = x.value; c.auto = false; save(); renderBizTable(); });
-  $$('#crits [data-ck]').forEach(x => x.oninput = () => { const c = ST.crits[+x.dataset.ck]; c.kw = x.value; c.auto = false; save(); });
-  $$('#crits [data-cd]').forEach(x => x.onclick = () => { const i = +x.dataset.cd; ST.crits.splice(i, 1); for (const k in ST.marks) { const m = ST.marks[k], n = {}; Object.keys(m).forEach(j => { if (+j < i) n[j] = m[j]; else if (+j > i) n[+j - 1] = m[j]; }); ST.marks[k] = n; } save(); refresh(); });
+  ST.crits.forEach(c => { if (!c.id) c.id = newId(); });
+  compute();   // 기준이 바뀐 직후에도 '해당 회사 수'가 맞게
+  if (ST.bizNoteAuto) autoNote();
+  const pop = ROWS.filter(r => !r.ext);
+  $('#crits').innerHTML = ST.crits.length ? ST.crits.map((c, i) => { const n = pop.filter(r => r.crit[i]).length;
+    return `<div class="critcard">
+      <div class="crithead"><span class="critno">${i + 1}</span>
+        <input class="critlbl" data-cl="${i}" value="${esc(critName(c))}" title="눌러서 기준 이름을 고칠 수 있어요">
+        ${c.auto ? '<span class="pill" title="회사 설명을 보고 자동으로 만든 기준">자동</span>' : ''}
+        <span class="critn">${n}개사 해당</span><button class="btn sm" data-cd="${i}" title="이 기준 빼기">빼기</button></div>
+      <div class="chips">${kwList(c).map((k, j) => `<span class="chip">${esc(k)}<button data-kx="${i}:${j}" title="키워드 빼기">×</button></span>`).join('')}
+        <input class="kwin" data-ka="${i}" placeholder="+ 키워드" title="키워드 입력 후 Enter"></div></div>`; }).join('')
+    : `<div class="note" style="margin:0">${REC ? '아래 추천 기준을 누르거나' : '① 모집단에서 회사 설명으로 추천을 받으면 기준이 자동으로 잡혀요. 또는'} 키워드를 입력해 기준을 추가하세요.</div>`;
+  const used = ST.crits.flatMap(kwList).map(k => stem(k.toLowerCase().replace(/\s/g, '')));
+  const sug = REC ? makeCrits(8, used).filter(x => !ST.crits.some(c => c.label === x.label)) : [];
+  $('#critSug').innerHTML = sug.length ? `<div class="x" style="margin:10px 0 4px">추천 기준 <span class="x">— 누르면 바로 추가돼요(괄호: 사업이 비슷한 회사 중 해당 수)</span></div><div class="chips">${sug.map((x, i) => `<button class="chip sugchip" data-sg="${i}">＋ ${esc(x.label.replace(' 관련 사업 영위', ''))} <span class="x">(${x.n})</span></button>`).join('')}</div>` : '';
+  const upd = () => { save(); refreshLight(); renderBiz(); };
+  $$('#crits [data-cl]').forEach(x => x.onchange = () => { const c = ST.crits[+x.dataset.cl]; c.label = x.value.trim(); c.auto = false; save(); renderBizTable(); });
+  $$('#crits [data-cd]').forEach(x => x.onclick = () => { const c = ST.crits.splice(+x.dataset.cd, 1)[0]; for (const k in ST.markOv) delete ST.markOv[k][c.id]; upd(); });
+  $$('#crits [data-kx]').forEach(x => x.onclick = () => { const [i, j] = x.dataset.kx.split(':').map(Number), c = ST.crits[i], l = kwList(c); l.splice(j, 1); c.kw = l.join(', '); c.auto = false; upd(); });
+  $$('#crits [data-ka]').forEach(x => x.onkeydown = e => { if (e.key !== 'Enter') return; const c = ST.crits[+x.dataset.ka], add = x.value.split(',').map(v => v.trim()).filter(Boolean);
+    if (!add.length) return; c.kw = [...new Set([...kwList(c), ...add])].join(', '); c.auto = false; upd(); setTimeout(() => { const n = $(`#crits [data-ka="${x.dataset.ka}"]`); if (n) n.focus(); }, 0); });
+  $$('#critSug [data-sg]').forEach(x => x.onclick = () => { const c = sug[+x.dataset.sg]; ST.crits.push({ ...c, auto: false }); upd(); });
   $('#bizNote').value = ST.bizNote || '';
   renderBizTable();
 }
 function renderBizTable(){
   const rows = ROWS;
-  $('#bizTbl').innerHTML = rows.length ? `<tr><th class="l nm">회사</th><th class="l">시장</th>${REC ? '<th>사업 유사도</th>' : ''}<th class="l">주요제품(KIND)</th><th class="l">매출 비중(사업보고서)</th>${ST.crits.map((c, i) => `<th class="c">${i + 1}) ${esc(c.label || '기준')}</th>`).join('')}<th class="c">사업유사성</th><th class="l">관련 사업 영역(R)</th></tr>` +
+  $('#bizTbl').innerHTML = rows.length ? `<tr><th class="l nm">회사</th><th class="l">시장</th>${REC ? '<th>사업 유사도</th>' : ''}<th class="l">주요제품(KIND)</th><th class="l">매출 비중(사업보고서)</th>${ST.crits.map((c, i) => `<th class="c">${i + 1}) ${esc(critName(c))}</th>`).join('')}<th class="c">사업유사성</th><th class="l">관련 사업 영역(R)</th></tr>` +
     rows.map(r => `<tr class="${r.biz ? '' : ''}"><td class="l nm">${esc(r.name)}<div class="x">${esc(r.code)}</div></td><td class="l">${esc(r.market)}</td>${REC ? `<td>${simCell(r.code)}</td>` : ''}
       <td class="l wrap small">${esc(r.c.product || '')}</td><td class="l wrap small">${esc(mixTxt(r.c)) || '<span class="mu">–</span>'}${r.c.mixYear ? ` <span class="x">${esc(r.c.mixYear)}</span>` : ''}</td>
-      ${r.crit.map((b, i) => `<td class="c"><button class="ox ${b ? 'o' : 'x'}" data-mk="${esc(r.code)}" data-i="${i}">${b ? 'O' : 'X'}</button></td>`).join('')}
+      ${r.crit.map((b, i) => `<td class="c"><button class="ox ${b ? 'o' : 'x'}${b !== r.critAuto[i] ? ' man' : ''}" data-mk="${esc(r.code)}" data-i="${i}" title="${b !== r.critAuto[i] ? '직접 바꾼 칸(다시 누르면 자동으로)' : '눌러서 바꾸기'}">${b ? 'O' : 'X'}</button></td>`).join('')}
       <td class="c">${OX(r.biz)}</td><td class="l"><input type="text" data-ar="${esc(r.code)}" value="${esc(ST.area[r.code] || '')}" placeholder="${esc((r.c.product || '').split(',')[0])}" style="min-width:150px"></td></tr>`).join('') : '<tr><td class="empty">먼저 ① 모집단을 만드세요.</td></tr>';
-  $$('#bizTbl [data-mk]').forEach(b => b.onclick = () => { const m = ST.marks[b.dataset.mk] = ST.marks[b.dataset.mk] || {}; m[b.dataset.i] = !m[b.dataset.i]; save(); refresh(); });
+  $$('#bizTbl [data-mk]').forEach(b => b.onclick = () => { const code = b.dataset.mk, i = +b.dataset.i, c = ST.crits[i], r = ROWS.find(x => x.code === code); if (!c || !r) return;
+    const m = ST.markOv[code] = ST.markOv[code] || {};
+    if (m[c.id] != null) delete m[c.id]; else m[c.id] = !r.critAuto[i];
+    save(); refreshLight(); renderBiz(); });
   $$('#bizTbl [data-ar]').forEach(x => x.onchange = () => { ST.area[x.dataset.ar] = x.value; save(); });
 }
 /* ---------------- ③ 2차 ---------------- */
@@ -757,22 +790,13 @@ function bindAll(){
   ['dLo', 'dHi'].forEach(k => { const el = $('#' + k); el.addEventListener('input', () => { ST[k] = el.value; ST.dManual = true; save(); renderVal(); renderR(); }); });
   $('#bizNote').addEventListener('input', e => { ST.bizNote = e.target.value; ST.bizNoteAuto = false; save(); });
 }
-$('#addCrit').onclick = () => { ST.crits.push({ label: '', kw: '' }); save(); renderBiz(); refreshLight(); };
-$('#clearCrit').onclick = () => { if (confirm('1차 O/X 표시를 모두 지울까요?')) { ST.marks = {}; save(); refreshLight(); } };
+const TXT = {};
 function critHits(r){   // 각 1차 기준의 키워드가 이 회사 주요제품·매출비중·업종·사업보고서 핵심어에 있는지
-  const terms = BIZ && BIZ.docs[r.code] ? BIZ.docs[r.code].map(x => x[0]).join(' ') : '';
-  const txt = norm([r.c.product, r.c.sector, ksName(r.c.ksic), mixTxt(r.c), ST.area[r.code], terms].join(' '));
+  const key = r.code + '|' + (ST.area[r.code] || '') + '|' + (BIZ ? 1 : 0);
+  const txt = TXT[key] || (TXT[key] = norm([r.c.product, r.c.sector, ksName(r.c.ksic), mixTxt(r.c), ST.area[r.code], BIZ && BIZ.docs[r.code] ? BIZ.docs[r.code].map(x => x[0]).join(' ') : ''].join(' ')));
   return ST.crits.map(c => (c.kw || '').split(',').map(x => x.trim()).filter(Boolean).some(k => txt.includes(norm(k)) || coHas(r.code, stem(k.toLowerCase().replace(/\s/g, '')))));
 }
-function autoMark(idxs, codes){
-  let n = 0;
-  for (const r of ROWS) {
-    if (codes && !codes.includes(r.code)) continue;
-    critHits(r).forEach((hit, i) => { if (!hit || (idxs && !idxs.includes(i))) return; const m = ST.marks[r.code] = ST.marks[r.code] || {}; if (!m[i]) { m[i] = true; n++; } });
-  }
-  return n;
-}
-$('#autoCrit').onclick = () => { const n = autoMark(); save(); refreshLight(); alert(`${n}개 칸을 O로 표시했어요. 결과를 꼭 눈으로 확인하세요.`); };
+function autoMark(){ return 0; }   // O/X는 이제 키워드로 실시간 계산(직접 누른 칸만 저장)
 
 /* 업종·회사 검색 */
 function suggest(inp, box, list, pick){
@@ -797,7 +821,7 @@ suggest($('#coQ'), $('#coSugg'), q => { q = norm(q); if (!q) return []; const h 
    회사 설명 → 낱말 조각(한글 2글자씩 + 3~6글자 낱말, 영문 낱말) → 사업보고서·주요제품 색인(TF-IDF)과 코사인 유사도.
    tokens()는 scripts/update.py 의 tokens()와 똑같이 맞춰야 함 */
 const JOSA = '하였습니다 했습니다 합니다 됩니다 입니다 하였으며 하였고 하며 되며 되고 이다 하였다 했다 으로부터 로부터 이라는 라는 에는 와의 과의 에서는 으로는 에서도 으로서 으로써 에서 으로 에게 까지 부터 이며 이고 하는 하여 하고 한다 된다 되는 되어 적인 적으로 들의 들은 들이 들을 은 는 을 를 의 에 와 과 용 및 등'.split(' ').sort((a, b) => b.length - a.length);
-const STOPW_EN = new Set('a an the and or of to in on for with by from at as is are was were be been being it its this that these those any all some other such than then there their they we our you your he she his her not no yes can may will would should could do does did done has have had also into over under about after before between more most less new novel based using use used via per each early late pre post up out etc inc co ltd corp llc company year years deal date ipo vs ex eg ie key core global world market total part plan'.split(' '));
+const STOPW_EN = new Set('phase expansion enhanced presentation confidential disclaimer investor investors relations information purpose purposes only provided statements statement forward looking risk risks may june july august september october november december january february march april page slide copyright reserved rights a an the and or of to in on for with by from at as is are was were be been being it its this that these those any all some other such than then there their they we our you your he she his her not no yes can may will would should could do does did done has have had also into over under about after before between more most less new novel based using use used via per each early late pre post up out etc inc co ltd corp llc company year years deal date ipo vs ex eg ie key core global world market total part plan'.split(' '));
 const STOPW = new Set('당사 회사 동사 사업 제품 서비스 기타 주요 관련 국내 해외 시장 매출 분야 부문 업체 기업 통해 위해 대한 있는 있습니다 합니다 하였습니다 있으며 경우 이상 이하 현재 당기 전기 기준 사용 제공 생산 판매 개발 제조'.split(' '));
 function stem(w){ for (const j of JOSA) if (w.endsWith(j) && w.length - j.length >= 2) return w.slice(0, -j.length); return w; }
 function words(text){ const out = []; for (const w of (String(text || '').replace(/^\[[^\]\n]*\]$/gm, ' ').toLowerCase().match(/[가-힣]+|[a-z0-9]+/g) || [])) {
@@ -917,47 +941,15 @@ function renderRec(){
   $$('#recBox [data-rs]').forEach(x => x.onchange = () => { const k = x.dataset.rs; ST.recSecSel = x.checked ? [...new Set([...(ST.recSecSel || []), k])] : (ST.recSecSel || []).filter(z => z !== k); save(); x.closest('tr').classList.toggle('hl', x.checked); applyRecSoon(false); });
   $$('#recBox [data-rc]').forEach(x => x.onchange = () => { const k = x.dataset.rc; ST.recCoSel = x.checked ? [...new Set([...(ST.recCoSel || []), k])] : (ST.recCoSel || []).filter(z => z !== k); save(); x.closest('tr').classList.toggle('hl', x.checked); applyRecSoon(false); });
 }
-async function loadScript(src, glob){ if (window[glob]) return window[glob];
-  await new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error('모듈을 불러오지 못했어요')); document.head.appendChild(s); }); return window[glob]; }
-const unxml = t => { const d = document.createElement('textarea'); d.innerHTML = t; return d.value; };
-async function fileText(f){
-  const n = f.name.toLowerCase();
-  if (n.endsWith('.pdf')) {
-    const lib = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'pdfjsLib');
-    lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    const doc = await lib.getDocument({ data: await f.arrayBuffer() }).promise; let t = '';
-    for (let i = 1; i <= Math.min(doc.numPages, 100); i++) { const pg = await doc.getPage(i); const c = await pg.getTextContent(); t += c.items.map(x => x.str).join(' ') + '\n'; $('#fileMsg').textContent = `${f.name} 읽는 중 ${i}/${doc.numPages}쪽`; }
-    return t;
-  }
-  if (n.endsWith('.pptx') || n.endsWith('.docx')) {
-    const JSZip = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip');
-    const z = await JSZip.loadAsync(await f.arrayBuffer());
-    const num = p => +((p.match(/(\d+)\.xml$/) || [])[1] || 0);
-    const list = Object.keys(z.files).filter(p => n.endsWith('.pptx') ? /^ppt\/slides\/slide\d+\.xml$/.test(p) : p === 'word/document.xml').sort((a, b) => num(a) - num(b));
-    let t = ''; for (const p of list) { const x = await z.file(p).async('string'); t += unxml((x.match(/<(?:a|w):t(?:\s[^>]*)?>[^<]*<\/(?:a|w):t>/g) || []).map(s => s.replace(/<[^>]+>/g, '')).join(' ')) + '\n'; }
-    return t;
-  }
-  if (/\.(txt|md|csv)$/.test(n)) return f.text();
-  throw new Error('PDF·PPTX·DOCX·TXT만 읽을 수 있어요(한글 hwp는 PDF로 저장해서 올려 주세요)');
-}
 function bindRec(){
+  if (/^\[[^\]\n]+\.(pdf|pptx|docx|txt|md)\]$/im.test(ST.desc || '') || (ST.desc || '').length > 1500) {   // 예전에 올린 IR 원문은 이 기기에서도 지움
+    ST.desc = ''; REC = null; SIM = {}; ST.kwAdj = {}; ST.kwPlus = []; ST.recKw = []; if (ST.bizNoteAuto) ST.bizNote = ''; save(); setTimeout(() => { $('#fileMsg').textContent = '예전에 넣었던 IR자료 원문은 지웠어요. 사업 내용을 직접 요약해서 적어 주세요.'; }, 0);
+  }
   const d = $('#desc'); d.value = ST.desc || '';
   d.addEventListener('input', () => { ST.desc = d.value; save(); });
-  $('#recBtn').onclick = async () => { ST.desc = d.value; if (!ST.desc.trim() && !ST.kwPlus.length) { $('#fileMsg').textContent = '사업 설명을 먼저 적거나 자료를 올려 주세요.'; return; }
+  $('#recBtn').onclick = async () => { ST.desc = d.value; if (!ST.desc.trim() && !ST.kwPlus.length) { $('#fileMsg').textContent = '회사 사업 설명을 먼저 적어 주세요.'; return; }
     runRec(true); save(); renderRec(); $('#popMore').open = false; $('#recBox').scrollIntoView({ behavior: 'smooth', block: 'start' }); await applyRec(true); };
   $('#descClear').onclick = () => { d.value = ST.desc = ''; ST.kwAdj = {}; ST.kwPlus = []; REC = null; SIM = {}; ST.recSecSel = ST.recCoSel = null; save(); renderRec(); refreshLight(); };
-  $('#descFile').onchange = async e => {
-    const files = [...e.target.files]; e.target.value = '';
-    for (const f of files) {
-      try { $('#fileMsg').textContent = `${f.name} 읽는 중…`;
-        let t = (await fileText(f)).replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
-        if (t.replace(/\s/g, '').length < 50) { $('#fileMsg').textContent = `${f.name}: 글자를 거의 못 읽었어요(그림으로 된 PDF일 수 있어요). 핵심 내용을 직접 적어 주세요.`; continue; }
-        if (t.length > 40000) t = t.slice(0, 40000);
-        d.value = (d.value.trim() ? d.value.trim() + '\n\n' : '') + `[${f.name}]\n` + t; ST.desc = d.value; save();
-        $('#fileMsg').textContent = `${f.name} → ${t.length.toLocaleString()}자 넣었어요. '모집단 추천 받기'를 누르세요.`;
-      } catch (err) { $('#fileMsg').textContent = `${f.name}: ${err.message}`; }
-    }
-  };
   ['mKospi', 'mKosdaq'].forEach(k => $('#' + k).addEventListener('change', () => { if (REC) { runRec(false); renderRec(); } }));
   renderRec();
 }
@@ -976,12 +968,12 @@ function phraseOf(w){   // 설명 속 '키워드 + 바로 뒤 명사(부품·모
   return null;
 }
 const eunNeun = t => { const ch = (t || '').trim().slice(-1), c = ch.charCodeAt(0); if (!(c >= 0xAC00 && c <= 0xD7A3)) return `${t}은(는)`; return `${t}${(c - 0xAC00) % 28 ? '은' : '는'}`; };
-function makeCrits(){
+function makeCrits(max = 4, skip = []){
   if (!REC || !BIZ) return [];
   const T = REC.sc.slice(0, 60).map(x => x.code);
   const cand = [...ST.kwPlus.map(k => ({ w: stem(k.toLowerCase().replace(/\s/g, '')), show: k, s: 1e6, user: true })),
                 ...REC.kws.filter(k => ST.kwAdj[k.w] !== 0).map(k => ({ w: k.w, show: dispW(k.w), s: k.s * (ST.kwAdj[k.w] === 2 ? 3 : 1), star: ST.kwAdj[k.w] === 2 }))];
-  const seen = new Set(), items = [];
+  const seen = new Set(skip), items = [];
   for (const c of cand) {
     if (seen.has(c.w)) continue; seen.add(c.w);
     if (!c.user && !c.star && wordIdf(c.w) < 2.3) continue;           // 상장사 10% 넘게 쓰는 흔한 말(부품·장비 등)은 기준 이름에서 뺌
@@ -994,33 +986,31 @@ function makeCrits(){
   for (const it of items) {
     const g = groups.find(g => g.ws.some(w => w.includes(it.w) || it.w.includes(w)) || (g.ph && g.ph.toLowerCase().split(' ').includes(it.w)) || jac(g.S, it.S) >= 0.4);
     if (g) { if (g.shows.length < 4) { g.ws.push(it.w); g.shows.push(it.show); } }
-    else if (groups.length < 4) groups.push({ ws: [it.w], shows: [it.show], S: new Set(it.S), ph: phraseOf(it.w) });
+    else if (groups.length < max) groups.push({ ws: [it.w], shows: [it.show], S: new Set(it.S), ph: phraseOf(it.w) });
   }
   return groups.map(g => { const ph = g.ph;
     const name = ph ? (g.shows.length > 1 ? `${ph}(${g.shows.slice(1, 3).filter(x => !ph.toLowerCase().includes(x.toLowerCase())).join('·')})`.replace('()', '') : ph) : g.shows.slice(0, 2).join('·');
-    return { label: `${name} 관련 사업 영위`, kw: g.shows.join(', '), auto: true }; });
+    return { id: newId(), label: `${name} 관련 사업 영위`, kw: g.shows.join(', '), auto: true, n: g.S.size }; });
 }
 function applyAutoCrits(){
   const nc = makeCrits(); if (!nc.length) return 0;
-  compute();
-  const keep = ST.crits.map((c, i) => ({ c, i })).filter(x => !x.c.auto && (x.c.label || x.c.kw));
-  const marks = {};
-  for (const k in ST.marks) { const m = ST.marks[k], n = {}; keep.forEach((x, j) => { if (m[x.i]) n[nc.length + j] = true; }); marks[k] = n; }
-  ST.crits = [...nc, ...keep.map(x => x.c)]; ST.marks = marks;
-  autoMark(nc.map((_, i) => i));
-  if (!ST.bizNote || ST.bizNoteAuto) {
-    const d0 = ST.desc.replace(/^\[[^\]\n]*\]$/gm, ' ').replace(/\s+/g, ' ').trim();
-    const first = ((d0.match(/^.{15,180}?(?:[.。]|다\.?)(?=\s|$)/) || [d0.slice(0, 160)])[0]).trim().replace(/^(당사는|회사는|동사는)\s*/, '');
-    ST.bizNote = `${eunNeun(ST.tName || '회사')} ${first}\n이에 사업 유사성 기준으로 ${nc.map((c, i) => `${i + 1}) ${c.label}`).join(', ')} 중 한 가지 이상을 충족하는 회사를 선정하였습니다.`;
-    ST.bizNoteAuto = true;
-  }
+  const keep = ST.crits.filter(c => !c.auto);
+  ST.crits = [...nc.slice(0, 3), ...keep];
+  if (!ST.bizNote || ST.bizNoteAuto) autoNote();
   return nc.length;
 }
-$('#kwCrit').onclick = () => {
-  if (!REC) { alert('먼저 ① 모집단에서 회사 설명으로 추천을 받아 주세요.'); return; }
-  if (!applyAutoCrits()) { alert('기준으로 쓸 만한 키워드를 못 찾았어요. ①에서 핵심 키워드에 ★를 주거나 키워드를 직접 추가해 보세요.'); return; }
-  save(); renderBiz(); refreshLight();
-};
+function autoNote(){   // 기준 설명문 자동 작성(직접 고치면 그 뒤로는 손대지 않음)
+  const d0 = (ST.desc || '').replace(/\s+/g, ' ').trim();
+  if (!d0 || !ST.crits.length) return;
+  const first = ((d0.match(/^.{15,180}?(?:[.。]|다\.?)(?=\s|$)/) || [d0.slice(0, 160)])[0]).trim().replace(/^(당사는|회사는|동사는)\s*/, '');
+  ST.bizNote = `${eunNeun(ST.tName || '회사')} ${first}\n이에 사업 유사성 기준으로 ${ST.crits.map((c, i) => `${i + 1}) ${critName(c)}`).join(', ')} 중 한 가지 이상을 충족하는 회사를 선정하였습니다.`;
+  ST.bizNoteAuto = true;
+}
+/* ② 1차 기준 추가·되돌리기 */
+const addCritKw = () => { const v = $('#critNew').value.split(',').map(x => x.trim()).filter(Boolean); if (!v.length) return;
+  ST.crits.push({ id: newId(), label: '', kw: v.join(', ') }); $('#critNew').value = ''; save(); refreshLight(); renderBiz(); };
+$('#critNewBtn').onclick = addCritKw; $('#critNew').onkeydown = e => { if (e.key === 'Enter') addCritKw(); };
+$('#ovReset').onclick = () => { ST.markOv = {}; save(); refreshLight(); renderBiz(); };
 
 /* 사이트 잠금(배포 때 scripts/lock.py 가 씌움) */
 if (window.__pvLocked) { const b = $('#lockBtn'); b.hidden = false; b.onclick = () => { try { localStorage.removeItem('pv:lock'); } catch (e) {} location.reload(); }; }
