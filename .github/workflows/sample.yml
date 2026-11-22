@@ -1,7 +1,7 @@
 name: 임시 - 사업보고서 샘플
 on: workflow_dispatch
 permissions:
-  contents: read
+  contents: write
 jobs:
   sample:
     runs-on: ubuntu-latest
@@ -10,8 +10,7 @@ jobs:
       - run: pip install -q requests && python3 scripts/sample_docs.py
         env:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sample
-          path: sample/
-          retention-days: 1
+      - run: |
+          cd sample && tar czf ../sample.tgz . && cd ..
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan tmp-sample && git rm -rq --cached . && git add sample.tgz && git commit -qm "임시 샘플" && git push -f origin tmp-sample
