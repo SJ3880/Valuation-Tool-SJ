@@ -478,62 +478,163 @@ def strip_tags(x):
     return re.sub(r"\s+", " ", _h.unescape(re.sub(r"<[^>]+>", " ", x))).strip()
 
 
-def parse_mix(xml):
-    """사업보고서 '주요 제품(및 서비스)' 표에서 품목·매출비중 뽑기"""
-    i = xml.find("주요 제품")
-    if i < 0:
-        i = xml.find("주요제품")
-    if i < 0:
-        return None
-    seg = xml[i: i + 200000]
-    j = seg.find("원재료")
-    if j > 0:
-        seg = seg[:j]
-    for tbl in re.findall(r"<TABLE.*?</TABLE>", seg, flags=re.S | re.I)[:6]:
-        rows = [[strip_tags(c) for c in re.findall(r"<T[DHE][^>]*>(.*?)</T[DHE]>", tr, flags=re.S | re.I)]
-                for tr in re.findall(r"<TR.*?</TR>", tbl, flags=re.S | re.I)]
-        rows = [r for r in rows if any(r)]
-        if len(rows) < 2:
-            continue
-        hdr_i = next((k for k, r in enumerate(rows[:3]) if any(re.search(r"비율|비중|%", c) for c in r)), None)
-        if hdr_i is None:
-            continue
-        hdr = [c.replace(" ", "") for c in rows[hdr_i]]
-        pc = next((k for k, c in enumerate(hdr) if re.search(r"비율|비중", c)), None)
-        if pc is None:
-            pc = next((k for k, c in enumerate(hdr) if "%" in c), None)
-        nc = next((k for k, c in enumerate(hdr) if re.search(r"품목|제품|품명|상품", c)), None)
-        if nc is None:
-            nc = next((k for k, c in enumerate(hdr) if re.search(r"부문|구분", c)), 0)
-        out = []
-        isnum = lambda t: bool(re.fullmatch(r"[\s\d,.\-()%△▲]*", t or ""))
-        total = lambda t: bool(re.search(r"합계|총계|소계|^계$|^합$|전체", (t or "").replace(" ", "")))
-        for r in rows[hdr_i + 1:]:
-            off = len(hdr) - len(r)                 # 병합된 행은 앞쪽 칸이 빠져 있으므로 끝에서부터 맞춤
-            pi = pc - off
-            if not (0 <= pi < len(r)):
-                continue
-            # 이름: 비율 칸 왼쪽에서 숫자가 아닌 가장 오른쪽 글자 칸(금액 칸은 건너뜀)
-            cand = [t for t in r[:pi] if t and not isnum(t)]
-            if not cand:
-                continue
-            name = cand[-1]
-            if any(total(t) for t in r[:pi]) or total(name):
-                continue
-            v = re.sub(r"[^0-9.\-]", "", r[pi])
-            try:
-                pct = float(v)
-            except ValueError:
-                continue
-            if 0 < pct < 100:
-                out.append({"n": re.sub(r"\s+", " ", name)[:40], "p": round(pct, 2)})
-        if out:
-            out.sort(key=lambda x: -x["p"])
-            return out[:6]
+REGION_RE = re.compile(r"^(국내|해외|수출|내수|한국|중국|미국|일본|유럽|러시아|베트남|인도|대만|홍콩|싱가포르|태국|독일|멕시코|브라질|캐나다|"
+                       r"아시아|미주|구주|북미|남미|중남미|중동|동남아|아프리카|오세아니아|기타지역|기타국가|지역)")
+TOTAL_RE = re.compile(r"합계|총계|소계|^계$|^합$|전체|^총$|내부거래|연결조정|조정|제거|계(\(.*\))?$")
+BAD_NAME_RE = re.compile(r"^(자산|부채|자본|자본금|차입금|RP매도|예수금|매출액|영업이익|당기순이익|현금|사채|금전신탁|특별유보금|발행어음|예치금|금전채권|대출채권|유가증권|보험료|책임준비금)")
+GENERIC = {"제품", "상품", "용역", "서비스", "기타", "내수", "수출", "매출", "제품매출", "상품매출", "용역매출", "기타매출", "로열티", "합계"}
+_isnum = lambda t: bool(t) and bool(re.search(r"\d", t)) and bool(re.fullmatch(r"[\s\d,.\-()%△▲▽\+]*", t))
+def _num(t):
+    try:
+        return float(re.sub(r"[^0-9.]", "", t) or "nan") * (-1 if re.search(r"^\s*[\-△▲▽(]", t or "") else 1)
+    except ValueError:
+        return float("nan")
+
+
+def _mix_sections(xml):
+    """'2. 주요 제품 및 서비스' 절, '4. 매출 및 수주상황' 절(둘 다 'II. 사업의 내용' 안)"""
+    m = re.search(r"<TITLE[^>]*>\s*(?:II|Ⅱ|2)\s*\.\s*사업의\s*내용", xml)
+    base = m.start() if m else 0
+    body = xml[base:]
+    t = re.search(r"<TITLE[^>]*>\s*2\s*\.\s*주요\s*(?:제품|사업|상품|서비스)", body)
+    st = t.start() if t else max(0, body.find("주요 제품"))
+    e = re.search(r"<TITLE[^>]*>\s*[3-9]\s*\.", body[st + 10:])
+    sec1 = body[st: st + 10 + (e.start() if e else 150000)]
+    s4 = re.search(r"<TITLE[^>]*>\s*[3-5]\s*\.\s*매출", body)
+    sec2 = ""
+    if s4:
+        e2 = re.search(r"<TITLE[^>]*>\s*[4-9]\s*\.", body[s4.start() + 10:])
+        sec2 = body[s4.start(): s4.start() + 10 + (e2.start() if e2 else 150000)]
+    return sec1, sec2
+
+
+def _table_rows(tbl):
+    rows = [[strip_tags(c) for c in re.findall(r"<T[DHE][^>]*>(.*?)</T[DHE]>", tr, flags=re.S | re.I)]
+            for tr in re.findall(r"<TR.*?</TR>", tbl, flags=re.S | re.I)]
+    return [r for r in rows if any(r) and not (len([c for c in r if c]) == 1 and re.match(r"^\(?\s*단\s*위", next(c for c in r if c)))]
+
+
+def _name_col(hdr):
+    for pat in (r"^품목|품목명", r"제품명|품명|주요제품|주요품목|제품및서비스|주요상품", r"사업부문|^부문", r"^제품$|^상품$|^서비스$", r"^구분$"):
+        k = next((k for k, c in enumerate(hdr) if re.search(pat, c)), None)
+        if k is not None:
+            return k
     return None
 
 
-MIX_VER = 2
+def _name_of(cells, upto, hdr=None):
+    txt = [c for c in cells[:upto] if c and not _isnum(c) and not re.fullmatch(r"\(?주\d*\)?|-|–", c)]
+    if not txt:
+        return None
+    nm = None
+    if hdr:
+        nc = _name_col(hdr)
+        if nc is not None:
+            k = nc - (len(hdr) - len(cells)) if len(cells) < len(hdr) else nc
+            if 0 <= k < upto and cells[k] and not _isnum(cells[k]):
+                nm = cells[k]
+    if nm is None:
+        cand = [c for c in txt if c.replace(" ", "") not in GENERIC] or txt
+        nm = cand[-1]
+    elif nm.replace(" ", "") in GENERIC:
+        cand = [c for c in txt if c.replace(" ", "") not in GENERIC]
+        nm = cand[-1] if cand else nm
+    if re.search(r"\(주\)|㈜|주식회사|Co\.,|Inc\.|Ltd", nm) and len(txt) > 1:   # 품목 칸에 회사 이름이 들어간 표 → 부문 이름
+        nm = txt[0]
+    return re.sub(r"\s+", " ", nm).strip(" :")
+
+
+def _good(out):
+    if not out:
+        return False
+    if sum(1 for x in out if REGION_RE.match(x["n"].replace(" ", ""))) >= max(1, len(out) / 2):
+        return False                                    # 지역별 매출 표
+    tot = sum(x["p"] for x in out)
+    if any(BAD_NAME_RE.search(x["n"].replace(" ", "")) or re.search(r"%|:|기준$|^영업-", x["n"]) for x in out):
+        return False                                    # 자금조달·재무상태 표(은행·증권 등)
+    return 40 <= tot <= 130 or (len(out) == 1 and out[0]["p"] >= 40)
+
+
+def _mix_pct_table(rows):
+    """비율(비중) 칸이 있는 표"""
+    hi = next((k for k, r in enumerate(rows[:3]) if any(re.search(r"비율|비중|구성비|점유율|%", c.replace(" ", "")) for c in r)), None)
+    if hi is None:
+        return None
+    hdr = [c.replace(" ", "") for c in rows[hi]]
+    pc = next((k for k, c in enumerate(hdr) if re.search(r"비율|비중|구성비|점유율", c)), None)
+    if pc is None:
+        pc = next((k for k, c in enumerate(hdr) if "%" in c), None)
+    sub = all(re.search(r"금액|비율|비중|매출|구성비|%|수량", c) for c in hdr if c)   # 두 번째 머리글(금액·비율 반복)
+    out = []
+    for r in rows[hi + 1:]:
+        nums = [k for k, c in enumerate(r) if _isnum(c)]
+        if not nums:
+            continue
+        first = nums[0]
+        pcts = [k for k in nums if "%" in r[k]]
+        if pcts:
+            pi = pcts[0]
+        elif sub:
+            pi = first + pc
+        else:
+            pi = pc - (len(hdr) - len(r))               # 병합된 행은 앞칸이 빠져 있으므로 끝에서부터 맞춤
+        if not (0 <= pi < len(r)) or not _isnum(r[pi]):
+            continue
+        nm = _name_of(r, first, None if sub else hdr)
+        if not nm or TOTAL_RE.search(nm.replace(" ", "")) or any(TOTAL_RE.search((c or "").replace(" ", "")) for c in r[:first]):
+            continue
+        v = _num(r[pi])
+        if v == v and 0 < v <= 100:
+            out.append({"n": nm[:40], "p": round(v, 2)})
+    return out
+
+
+def _mix_amt_table(rows):
+    """비율 칸이 없고 금액만 있는 표 → 첫 숫자(최근 연도) 기준으로 비중 계산"""
+    head = " ".join(" ".join(r) for r in rows[:2]).replace(" ", "")
+    if not (re.search(r"품목|제품|부문|사업|매출유형|서비스|상품", head) and re.search(r"매출액|금액|판매액", head)):
+        return None
+    items, total = [], None
+    for r in rows[1:]:
+        nums = [k for k, c in enumerate(r) if _isnum(c)]
+        if not nums:
+            continue
+        nm = _name_of(r, nums[0])
+        v = _num(r[nums[0]])
+        if not (v == v):
+            continue
+        label = " ".join(r[:nums[0]]).replace(" ", "")
+        if re.search(r"합계|총계|^계$|^합$|전체|^총", label):
+            total = v if total is None else total
+            continue
+        if not nm or TOTAL_RE.search(label) or v <= 0:
+            continue
+        items.append((nm, v))
+    s = sum(v for _, v in items)
+    den = total if total and total >= s * 0.8 else s
+    if len(items) < 2 or den <= 0:
+        return None
+    return [{"n": n[:40], "p": round(v / den * 100, 2)} for n, v in items if v / den * 100 >= 0.1]
+
+
+def parse_mix(xml):
+    """사업보고서 'II. 사업의 내용' → '주요 제품 및 서비스' 표(없으면 '매출 및 수주상황' 표)에서 품목별 매출비중"""
+    for sec in _mix_sections(xml):
+        tbls = [_table_rows(t) for t in re.findall(r"<TABLE.*?</TABLE>", sec, flags=re.S | re.I)]
+        tbls = [t for t in tbls if len(t) >= 2]
+        for fn in (_mix_pct_table, _mix_amt_table):
+            for rows in tbls[:12]:
+                out = [x for x in (fn(rows) or []) if not TOTAL_RE.search(x["n"].replace(" ", ""))]
+                if _good(out) and (fn is _mix_pct_table or sum(x["p"] for x in out) >= 80):
+                    seen, uniq = set(), []
+                    for x in sorted(out, key=lambda x: -x["p"]):
+                        if x["n"] not in seen:
+                            seen.add(x["n"]); uniq.append(x)
+                    return uniq[:10]
+    return None
+
+
+MIX_VER = 3
 BIZ_VER = 1
 BIZ_P = DATA / "biztxt.json"          # 사업보고서 '사업의 개요' 본문(모집단 자동 추천용, 화면에는 안 씀)
 
