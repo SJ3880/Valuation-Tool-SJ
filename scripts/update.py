@@ -557,11 +557,13 @@ def _good(out):
 
 def _mix_pct_table(rows):
     """비율(비중) 칸이 있는 표"""
-    hi = next((k for k, r in enumerate(rows[:3]) if any(re.search(r"비율|비중|구성비|점유율|%", c.replace(" ", "")) for c in r)), None)
+    if any("점유율" in c.replace(" ", "") for r in rows[:3] for c in r):
+        return None                                     # 시장점유율 표(경쟁사 비교)는 매출비중이 아님
+    hi = next((k for k, r in enumerate(rows[:3]) if any(re.search(r"비율|비중|구성비|%", c.replace(" ", "")) for c in r)), None)
     if hi is None:
         return None
     hdr = [c.replace(" ", "") for c in rows[hi]]
-    pc = next((k for k, c in enumerate(hdr) if re.search(r"비율|비중|구성비|점유율", c)), None)
+    pc = next((k for k, c in enumerate(hdr) if re.search(r"비율|비중|구성비", c)), None)
     if pc is None:
         pc = next((k for k, c in enumerate(hdr) if "%" in c), None)
     sub = all(re.search(r"금액|비율|비중|매출|구성비|%|수량", c) for c in hdr if c)   # 두 번째 머리글(금액·비율 반복)
@@ -615,6 +617,23 @@ def _mix_amt_table(rows):
     if len(items) < 2 or den <= 0:
         return None
     return [{"n": n[:40], "p": round(v / den * 100, 2)} for n, v in items if v / den * 100 >= 0.1]
+
+
+def clean_mix(items):
+    """'상 자' → '상자', 한 글자 품목(단위 등)·경쟁사 점유율 표 제거"""
+    if not items:
+        return None
+    out = []
+    for x in items:
+        n = x["n"].strip()
+        if re.fullmatch(r"(?:[가-힣] )+[가-힣]", n):
+            n = n.replace(" ", "")
+        if len(n.replace(" ", "")) < 2:
+            continue
+        out.append({**x, "n": n})
+    if any(re.search(r"^당사$|신탁$|증권$|은행$", x["n"]) for x in out) and len(out) >= 3:
+        return None
+    return out or None
 
 
 def parse_mix(xml):
@@ -904,7 +923,7 @@ def main():
         c["ksic"] = m.get("ksic")
         c["audit"] = (m.get("audit") or {}).get("opinion")
         c["auditYear"] = (m.get("audit") or {}).get("year")
-        mix = (m.get("mix") or {}).get("items") if ((m.get("mix") or {}).get("v") or 0) >= 2 else None   # 새 파서로 다시 읽기 전까지는 예전 값 유지
+        mix = clean_mix((m.get("mix") or {}).get("items") if ((m.get("mix") or {}).get("v") or 0) >= 2 else None)   # 새 파서로 다시 읽기 전까지는 예전 값 유지
         c["mix"] = mix or None
         c["mixYear"] = (m.get("mix") or {}).get("year") if mix else None
         items.append(c)
