@@ -904,7 +904,7 @@ def main():
         c["ksic"] = m.get("ksic")
         c["audit"] = (m.get("audit") or {}).get("opinion")
         c["auditYear"] = (m.get("audit") or {}).get("year")
-        mix = (m.get("mix") or {}).get("items") if (m.get("mix") or {}).get("v") == MIX_VER else None
+        mix = (m.get("mix") or {}).get("items") if ((m.get("mix") or {}).get("v") or 0) >= 2 else None   # 새 파서로 다시 읽기 전까지는 예전 값 유지
         c["mix"] = mix or None
         c["mixYear"] = (m.get("mix") or {}).get("year") if mix else None
         items.append(c)
