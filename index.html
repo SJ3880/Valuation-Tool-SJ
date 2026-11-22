@@ -181,10 +181,13 @@ details.card[open]>summary{margin-bottom:12px}
         <div><label class="f">파일 (PDF·PPT·워드·TXT)</label>
           <label class="btn" for="refFile">📄 파일 고르기</label><input type="file" id="refFile" accept=".pdf,.pptx,.docx,.txt,.md" multiple hidden>
           <span class="x" id="refMsg"></span></div>
-        <div><label class="f">뉴스·기사 (본문 붙여넣기)</label>
-          <input type="text" id="newsTitle" placeholder="제목 또는 링크(선택)" style="margin-bottom:6px">
-          <textarea id="newsText" rows="4" placeholder="기사 본문을 붙여넣으세요. 링크만으로는 사이트가 기사를 가져올 수 없어요."></textarea>
-          <button class="btn sm" id="newsAdd" style="margin-top:6px">+ 기사 추가</button></div>
+        <div><label class="f">뉴스·기사 (링크 또는 본문)</label>
+          <textarea id="newsLinks" rows="2" placeholder="기사 링크를 붙여넣으세요(여러 개면 한 줄에 하나씩). 예: https://www.thebell.co.kr/..."></textarea>
+          <button class="btn sm pri" id="newsFetch" style="margin:6px 0 10px">🔗 링크로 기사 가져오기</button> <span class="x" id="newsMsg"></span>
+          <details><summary class="x" style="cursor:pointer">링크가 안 열리는 기사(유료·로그인)는 본문 직접 붙여넣기</summary>
+            <input type="text" id="newsTitle" placeholder="제목(선택)" style="margin:6px 0">
+            <textarea id="newsText" rows="4" placeholder="기사 본문을 붙여넣으세요."></textarea>
+            <button class="btn sm" id="newsAdd" style="margin-top:6px">+ 기사 추가</button></details></div>
       </div>
       <div id="refList"></div>
     </div>
@@ -1038,24 +1041,27 @@ async function fileText(f, prog){
 const MAT_TEXT = {};   // 원문은 메모리에만(저장 안 함)
 function extractKws(text){   // 자료 원문 → 핵심 낱말 25개(상장사 전체에서 드문 말일수록 높게)
   const cnt = {};
-  words(text).forEach(h => { if (h.length === 3 && /[가이]$/.test(h)) { const b = h.slice(0, 2); if (STOPW.has(b)) return; if (BIZ && BIZ.idf[b]) h = b; }
+  const NEWS_STOP = /^(올해|내년|작년|지난해|전년|당시|이번|최근|관계자|기자|대비|비중|업계|시장|정도|가운데|이후|이전|현재|지난|오는|이날|해당|관련|전망|예정|계획|설명|발표|규모|금액|규모|대표|회장|사장)$/;
+  words(text).forEach(h => {
+    if (h.length >= 3 && /[가이은는을를]$/.test(h) && !(BIZ && BIZ.idf[h])) { const b = h.slice(0, -1); if (STOPW.has(b) || NEWS_STOP.test(b)) return; h = b; }   // 조사 떼기(에이치앤에스가 → 에이치앤에스)
+    if (/(다고|한다|했다|된다|는다|라고|어날|아날|겠다|었다|였다|하는|하며|으며|했고|이라)$/.test(h) || NEWS_STOP.test(h) || NEWS_STOP.test(h.replace(/[가이은는을를]$/, ''))) return;
     if ((h.length === 3 && /[가이고다며요는은게지면도]$/.test(h) && !(BIZ && BIZ.idf[h])) || (h.length === 2 && /[다며요게면]$/.test(h)) || /^(있다|했다|밝혔|늘고|있다고|말했)/.test(h)) return; cnt[h] = (cnt[h] || 0) + 1; });
   const sc = Object.entries(cnt).map(([h, n]) => { const id = BIZ ? wIdf(h) : 1; return id && id >= 1.5 ? [h, (1 + Math.log(n)) * id] : null; }).filter(Boolean).sort((a, b) => b[1] - a[1]).slice(0, 25);
   const mx = sc.length ? sc[0][1] : 1;
   return sc.map(([h, s]) => [h, Math.round(s / mx * 100) / 100]);
 }
 const revSentences = t => (t.replace(/\s+/g, ' ').match(/[^.!?。\n]{8,220}(?:[.!?。]|$)/g) || []).filter(x => /매출|비중|비율|점유/.test(x) && /\d/.test(x)).slice(0, 6);
-function addMat(name, kind, text){
+function addMat(name, kind, text, url){
   const id = newId(), kws = extractKws(text);
   if (!kws.length) return false;
   MAT_TEXT[id] = text;
-  ST.mats.push({ id, name: name.slice(0, 80), kind, at: new Date().toISOString().slice(0, 10), use: true, kws, off: [], chars: text.length });
+  ST.mats.push({ id, name: name.slice(0, 80), kind, url: url || '', at: new Date().toISOString().slice(0, 10), use: true, kws, off: [], chars: text.length });
   save(); renderRef(); return true;
 }
 function renderRef(){
   $('#n-ref').textContent = (ST.mats || []).filter(m => m.use).length;
   $('#refList').innerHTML = (ST.mats || []).length ? ST.mats.map((m, i) => `<div class="refcard ${m.use ? '' : 'off'}">
-      <div class="refhead"><span>${m.kind === 'news' ? '📰' : '📄'}</span><b title="${esc(m.name)}">${esc(m.name)}</b><span class="x">${esc(m.at)} · ${(m.chars || 0).toLocaleString()}자 읽음${MAT_TEXT[m.id] ? '' : ' · 원문 없음(키워드만)'}</span>
+      <div class="refhead"><span>${m.kind === 'news' ? '📰' : '📄'}</span><b title="${esc(m.name)}">${m.url ? `<a href="${esc(m.url)}" target="_blank" rel="noopener noreferrer">${esc(m.name)}</a>` : esc(m.name)}</b><span class="x">${esc(m.at)} · ${(m.chars || 0).toLocaleString()}자 읽음${MAT_TEXT[m.id] ? '' : ' · 원문 없음(키워드만)'}</span>
         <label class="chk" style="margin:0"><input type="checkbox" data-ru="${i}" ${m.use ? 'checked' : ''}> 추천에 반영</label><button class="btn sm" data-rd="${i}">삭제</button></div>
       <div class="chips">${m.kws.map(([h]) => `<span class="chip kw ${(m.off || []).includes(h) ? 'off' : ''}" data-rk="${i}:${esc(h)}" title="눌러서 빼기/되살리기">${esc(dispW(h))}</span>`).join('')}</div>
       ${MAT_TEXT[m.id] && revSentences(MAT_TEXT[m.id]).length ? `<div class="x" style="margin-top:8px">자료 속 매출 관련 문장 <span class="x">(② 매출비중 기준 잡을 때 참고 · 화면에만 보이고 저장 안 됨)</span></div><ul class="refsent">${revSentences(MAT_TEXT[m.id]).map(x => `<li>${esc(x.trim())}</li>`).join('')}</ul>` : ''}
@@ -1065,6 +1071,30 @@ function renderRef(){
   $$('#refList [data-rd]').forEach(x => x.onclick = () => { const m = ST.mats.splice(+x.dataset.rd, 1)[0]; delete MAT_TEXT[m.id]; changed(); });
   $$('#refList [data-rk]').forEach(x => x.onclick = () => { const [i, h] = [+x.dataset.rk.split(':')[0], x.dataset.rk.split(':').slice(1).join(':')], m = ST.mats[i];
     m.off = (m.off || []).includes(h) ? m.off.filter(z => z !== h) : [...(m.off || []), h]; changed(); });
+}
+/* 기사 링크 → 본문: 브라우저는 다른 사이트를 직접 못 읽어서(CORS), 공개 기사 읽기 서비스를 거쳐 가져옴
+   ① r.jina.ai(본문만 뽑아 줌) → 실패하면 ② allorigins(원문 HTML을 받아 여기서 본문 추출). 기사 링크(공개 주소)만 전달됨 */
+async function fetchArticle(url){
+  const tmo = ms => { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; };
+  const clean = t => t.split('\n').map(l => l.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[#>*_`|]+/g, ' ').trim())
+    .filter(l => l.length >= 25 && /[가-힣a-zA-Z]/.test(l) && !/^(Title|URL Source|Published Time|Markdown Content):/.test(l)
+      && !/저작권|무단\s*전재|재배포|구독|로그인|회원가입|Copyright|기자\s*\S+@|ⓒ|©/.test(l)).join('\n');
+  try {
+    const r = await fetch('https://r.jina.ai/' + url, { signal: tmo(25000) });
+    if (r.ok) { const t = await r.text(); const title = (t.match(/^Title:\s*(.+)$/m) || [])[1]; const body = clean(t);
+      if (body.replace(/\s/g, '').length >= 200) return { title: (title || '').trim(), text: body }; }
+  } catch (e) {}
+  const r2 = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), { signal: tmo(25000) });
+  if (!r2.ok) throw new Error('fetch');
+  const doc = new DOMParser().parseFromString(await r2.text(), 'text/html');
+  doc.querySelectorAll('script,style,noscript,nav,header,footer,aside,form,iframe').forEach(e => e.remove());
+  const title = (doc.querySelector('meta[property="og:title"]') || {}).content || doc.title || '';
+  const sel = ['[itemprop="articleBody"]', 'article', '#article_body', '#articleBody', '.article_body', '.article-body', '#article-view-content-div', '.viewSection', '#newsct_article', '#dic_area', '.news_cnt_detail_wrap', '#articeBody', '.article_view', '.view_cont'];
+  let el = sel.map(s => doc.querySelector(s)).find(e => e && e.textContent.trim().length > 200);
+  if (!el) { let best = null, bl = 0; doc.querySelectorAll('div,section').forEach(d => { const l = [...d.querySelectorAll(':scope > p, :scope > br')].length ? d.textContent.trim().length : 0; if (l > bl && l < 60000) { bl = l; best = d; } }); el = best || doc.body; }
+  const text = clean((el.innerText || el.textContent || '').replace(/\r/g, ''));
+  if (text.replace(/\s/g, '').length < 200) throw new Error('short');
+  return { title: title.trim(), text };
 }
 function bindRef(){
   $('#refFile').onchange = async e => {
@@ -1077,6 +1107,19 @@ function bindRef(){
       } catch (err) { msg(`${f.name}: ${err.message}`); }
     }
     if (REC || ST.desc) { runRec(true); renderRec(); applyRecSoon(true); }
+  };
+  $('#newsFetch').onclick = async () => {
+    const urls = [...new Set(($('#newsLinks').value.match(/https?:\/\/[^\s<>"']+/g) || []))];
+    const msg = t => $('#newsMsg').textContent = t;
+    if (!urls.length) { msg('기사 링크(https://…)를 넣어 주세요.'); $('#newsLinks').focus(); return; }
+    let ok = 0; const fail = [];
+    for (const [i, u] of urls.entries()) {
+      msg(`기사 가져오는 중 ${i + 1}/${urls.length}…`);
+      try { const a = await fetchArticle(u); if (addMat(a.title || u, 'news', a.text, u)) ok++; else fail.push(u); }
+      catch (e) { fail.push(u); }
+    }
+    if (ok) { $('#newsLinks').value = fail.join('\n'); if (REC || ST.desc) { runRec(true); renderRec(); applyRecSoon(true); } }
+    msg(`${ok}건 가져왔어요.` + (fail.length ? ` ${fail.length}건은 못 가져왔어요(유료·로그인 기사일 수 있어요 — 아래 '본문 직접 붙여넣기'를 써 주세요).` : ''));
   };
   $('#newsAdd').onclick = () => { const t = $('#newsText').value.trim(); if (t.length < 30) { $('#newsText').focus(); return; }
     const ok = addMat($('#newsTitle').value.trim() || t.slice(0, 40) + '…', 'news', t);
