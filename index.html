@@ -94,6 +94,15 @@ details.card[open]>summary{margin-bottom:12px}
 .critlbl:hover,.critlbl:focus{border-color:var(--line);background:var(--bg)}
 .critn{flex:none;font-size:12px;color:var(--mu)}
 .kwin{width:120px;border:1px dashed var(--line);background:transparent;border-radius:999px;padding:3px 10px;font-size:12px;color:inherit}
+.refadd{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin:12px 0}
+.refcard{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px}
+.refcard.off{opacity:.55}
+.refhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.refhead b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.refsent{font-size:12px;color:var(--mu);margin:6px 0 0;padding-left:14px}
+.critmode{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 8px 30px;font-size:13px}
+.critmode input.minin{width:64px!important;display:inline-block;padding:3px 6px;margin:0 4px}
+.critmode .mixset{white-space:nowrap;display:inline-flex;align-items:center}
 .critadd{display:flex;gap:6px;margin-top:4px}.critadd input{flex:1}
 .sugchip{cursor:pointer;border:1px dashed var(--accent)}
 .ox.man{text-decoration:underline;text-underline-offset:3px;font-weight:800}
@@ -153,6 +162,7 @@ details.card[open]>summary{margin-bottom:12px}
   </div>
 
   <div class="steps" id="steps">
+    <button data-s="ref">📎 참고자료<span class="n" id="n-ref">0</span></button>
     <button data-s="pop">① 모집단<span class="n" id="n-pop">0</span></button>
     <button data-s="biz">② 1차 사업 유사성<span class="n" id="n-biz">0</span></button>
     <button data-s="fin">③ 2차 재무 유사성<span class="n" id="n-fin">0</span></button>
@@ -160,6 +170,24 @@ details.card[open]>summary{margin-bottom:12px}
     <button data-s="val">⑤ 할인율 · 기업가치</button>
     <button data-s="r">⑥ R (요약)</button>
     <span class="progress" id="prog"></span>
+  </div>
+
+  <!-- 📎 참고자료 -->
+  <div class="pane" id="p-ref">
+    <div class="card">
+      <h2>📎 참고자료 <span class="x">IR자료·회사소개서·뉴스를 넣으면 핵심 사업 키워드를 뽑아 ① 모집단 추천과 ② 1차 기준 추천에 반영해요</span></h2>
+      <div class="note" style="margin-top:0">🔒 파일은 <b>이 브라우저 안에서만</b> 읽어요(서버로 올라가지 않음). <b>원문은 저장하지 않고</b> 뽑아낸 키워드만 남겨요 — 창을 닫으면 원문은 사라지고, 작업 저장 파일·엑셀에도 원문은 들어가지 않아요.</div>
+      <div class="refadd">
+        <div><label class="f">파일 (PDF·PPT·워드·TXT)</label>
+          <label class="btn" for="refFile">📄 파일 고르기</label><input type="file" id="refFile" accept=".pdf,.pptx,.docx,.txt,.md" multiple hidden>
+          <span class="x" id="refMsg"></span></div>
+        <div><label class="f">뉴스·기사 (본문 붙여넣기)</label>
+          <input type="text" id="newsTitle" placeholder="제목 또는 링크(선택)" style="margin-bottom:6px">
+          <textarea id="newsText" rows="4" placeholder="기사 본문을 붙여넣으세요. 링크만으로는 사이트가 기사를 가져올 수 없어요."></textarea>
+          <button class="btn sm" id="newsAdd" style="margin-top:6px">+ 기사 추가</button></div>
+      </div>
+      <div id="refList"></div>
+    </div>
   </div>
 
   <!-- ① 모집단 -->
@@ -309,7 +337,7 @@ $('#tTrack').innerHTML = TRACKS.map(t => `<option>${t}</option>`).join('');
 const DEF = () => ({ tName: '', baseDate: '', tMkt: '코스닥', tTrack: '일반', method: 'per', pxMode: 'min3', earnMode: 'ltm', unit: '1e6',
   sectors: [], mKospi: true, mKosdaq: true, adds: [], drops: [],
   desc: '', kwAdj: {}, kwPlus: [], recLv: 4, recN: 20, recTop: 40, recSecSel: null, recCoSel: null, recAdds: [], recAt: '', recKw: [],
-  crits: [], marks: {}, markOv: {}, area: {}, bizNote: '', minPeers: 2, expSecs: [], expBlock: [], expInfo: {},
+  crits: [], marks: {}, markOv: {}, mats: [], area: {}, bizNote: '', minPeers: 2, expSecs: [], expBlock: [], expInfo: {},
   fOp: true, fNi: true, fEb: false, fRev: false, fRevMin: 0,
   nAdmin: true, nList: true, nListM: 6, nAudit: true, nFye: true, nMult: true, nMin: 10, nMax: 50, risk: {}, ov: {},
   dMode: 'last1', dN: 5, dSince: '2023-01-01', dLo: '', dHi: '', dManual: false,
@@ -433,8 +461,8 @@ function calc(code){
   }
   r.mult = { per: r.per, psr: r.psr, ev: r.evx, pbr: r.pbr }[ST.method];
   // 1차
-  const mov = ST.markOv[code] || {}, hits = critHits(r);
-  r.critAuto = hits;
+  const mov = ST.markOv[code] || {}, ev = critEval(r), hits = ev.map(e => e.hit);
+  r.critAuto = hits; r.critPct = ev.map(e => e.pct); r.critItems = ev.map(e => e.items);
   r.crit = ST.crits.map((c, i) => mov[c.id] != null ? mov[c.id] : hits[i]);   // 키워드로 자동 O/X, 직접 누른 칸은 그 값
   r.biz = r.crit.some(Boolean);
   // 2차
@@ -596,7 +624,8 @@ function renderPop(){
 /* ---------------- ② 1차 ---------------- */
 const newId = () => Math.random().toString(36).slice(2, 9);
 const kwList = c => (c.kw || '').split(',').map(x => x.trim()).filter(Boolean);
-const critName = c => c.label || (kwList(c)[0] ? `${kwList(c)[0]} 관련 사업 영위` : '새 기준');
+const critName = c => c.label || (kwList(c)[0] ? (c.mode === 'mix' ? `${kwList(c).slice(0, 2).join('·')} 매출비중 ${+c.min || 0}% 이상` : `${kwList(c)[0]} 관련 사업 영위`) : '새 기준');
+const autoLabel = l => !l || / 관련 사업 영위$/.test(l) || /매출비중 \d+(\.\d+)?% 이상$/.test(l);
 function renderBiz(){
   ST.crits.forEach(c => { if (!c.id) c.id = newId(); });
   compute();   // 기준이 바뀐 직후에도 '해당 회사 수'가 맞게
@@ -608,6 +637,8 @@ function renderBiz(){
         <input class="critlbl" data-cl="${i}" value="${esc(critName(c))}" title="눌러서 기준 이름을 고칠 수 있어요">
         ${c.auto ? '<span class="pill" title="회사 설명을 보고 자동으로 만든 기준">자동</span>' : ''}
         <span class="critn">${n}개사 해당</span><button class="btn sm" data-cd="${i}" title="이 기준 빼기">빼기</button></div>
+      <div class="critmode"><span class="seg"><button data-md="${i}:any" class="${c.mode !== 'mix' ? 'on' : ''}" title="키워드에 해당하는 사업을 하고 있으면 O">사업 영위</button><button data-md="${i}:mix" class="${c.mode === 'mix' ? 'on' : ''}" title="키워드에 맞는 품목의 매출비중 합계로 판단">매출비중</button></span>
+        ${c.mode === 'mix' ? `<span class="mixset">키워드 품목 매출비중 합계 ≥<input type="number" class="minin" data-mn="${i}" value="${esc(c.min ?? 30)}" min="0" max="100" step="5">%</span><span class="x">매출비중 표가 있는 회사 ${pop.filter(r => (r.c.mix || []).length).length}/${pop.length}개사 · 표가 없는 회사는 X(표에서 직접 O로 바꿀 수 있어요)</span>` : '<span class="x">키워드가 주요제품·매출 품목·사업보고서에 있으면 O</span>'}</div>
       <div class="chips">${kwList(c).map((k, j) => `<span class="chip">${esc(k)}<button data-kx="${i}:${j}" title="키워드 빼기">×</button></span>`).join('')}
         <input class="kwin" data-ka="${i}" placeholder="+ 키워드" title="키워드 입력 후 Enter"></div></div>`; }).join('')
     : `<div class="note" style="margin:0">${REC ? '아래 추천 기준을 누르거나' : '① 모집단에서 회사 설명으로 추천을 받으면 기준이 자동으로 잡혀요. 또는'} 키워드를 입력해 기준을 추가하세요.</div>`;
@@ -616,6 +647,9 @@ function renderBiz(){
   $('#critSug').innerHTML = sug.length ? `<div class="x" style="margin:10px 0 4px">추천 기준 <span class="x">— 누르면 바로 추가돼요(괄호: 사업이 비슷한 회사 중 해당 수)</span></div><div class="chips">${sug.map((x, i) => `<button class="chip sugchip" data-sg="${i}">＋ ${esc(x.label.replace(' 관련 사업 영위', ''))} <span class="x">(${x.n})</span></button>`).join('')}</div>` : '';
   const upd = () => { save(); refreshLight(); renderBiz(); };
   $$('#crits [data-cl]').forEach(x => x.onchange = () => { const c = ST.crits[+x.dataset.cl]; c.label = x.value.trim(); c.auto = false; save(); renderBizTable(); });
+  $$('#crits [data-md]').forEach(x => x.onclick = () => { const [i, m] = x.dataset.md.split(':'), c = ST.crits[+i]; if (c.mode === m || (m === 'any' && !c.mode)) return;
+    if (autoLabel(c.label)) c.label = ''; c.mode = m; if (m === 'mix' && c.min == null) c.min = 30; c.auto = false; upd(); });
+  $$('#crits [data-mn]').forEach(x => x.onchange = () => { const c = ST.crits[+x.dataset.mn]; c.min = Math.max(0, Math.min(100, +x.value || 0)); if (autoLabel(c.label)) c.label = ''; upd(); });
   $$('#crits [data-cd]').forEach(x => x.onclick = () => { const c = ST.crits.splice(+x.dataset.cd, 1)[0]; for (const k in ST.markOv) delete ST.markOv[k][c.id]; upd(); });
   $$('#crits [data-kx]').forEach(x => x.onclick = () => { const [i, j] = x.dataset.kx.split(':').map(Number), c = ST.crits[i], l = kwList(c); l.splice(j, 1); c.kw = l.join(', '); c.auto = false; upd(); });
   $$('#crits [data-ka]').forEach(x => x.onkeydown = e => { if (e.key !== 'Enter') return; const c = ST.crits[+x.dataset.ka], add = x.value.split(',').map(v => v.trim()).filter(Boolean);
@@ -629,7 +663,9 @@ function renderBizTable(){
   $('#bizTbl').innerHTML = rows.length ? `<tr><th class="l nm">회사</th><th class="l">시장</th>${REC ? '<th>사업 유사도</th>' : ''}<th class="l">주요제품(KIND)</th><th class="l">매출 비중(사업보고서)</th>${ST.crits.map((c, i) => `<th class="c">${i + 1}) ${esc(critName(c))}</th>`).join('')}<th class="c">사업유사성</th><th class="l">관련 사업 영역(R)</th></tr>` +
     rows.map(r => `<tr class="${r.biz ? '' : ''}"><td class="l nm">${esc(r.name)}<div class="x">${esc(r.code)}</div></td><td class="l">${esc(r.market)}</td>${REC ? `<td>${simCell(r.code)}</td>` : ''}
       <td class="l wrap small">${esc(r.c.product || '')}</td><td class="l wrap small">${esc(mixTxt(r.c)) || '<span class="mu">–</span>'}${r.c.mixYear ? ` <span class="x">${esc(r.c.mixYear)}</span>` : ''}</td>
-      ${r.crit.map((b, i) => `<td class="c"><button class="ox ${b ? 'o' : 'x'}${b !== r.critAuto[i] ? ' man' : ''}" data-mk="${esc(r.code)}" data-i="${i}" title="${b !== r.critAuto[i] ? '직접 바꾼 칸(다시 누르면 자동으로)' : '눌러서 바꾸기'}">${b ? 'O' : 'X'}</button></td>`).join('')}
+      ${r.crit.map((b, i) => { const c = ST.crits[i], pc = r.critPct[i], mixm = c && c.mode === 'mix';
+        const tip = (b !== r.critAuto[i] ? '직접 바꾼 칸(다시 누르면 자동으로)' : '눌러서 바꾸기') + (mixm ? (pc == null ? ' · 매출비중 표 없음' : ` · 해당 품목: ${r.critItems[i].join(', ') || '없음'}`) : '');
+        return `<td class="c"><button class="ox ${b ? 'o' : 'x'}${b !== r.critAuto[i] ? ' man' : ''}" data-mk="${esc(r.code)}" data-i="${i}" title="${esc(tip)}">${b ? 'O' : 'X'}</button>${mixm ? `<div class="x">${pc == null ? '표 없음' : pc + '%'}</div>` : ''}</td>`; }).join('')}
       <td class="c">${OX(r.biz)}</td><td class="l"><input type="text" data-ar="${esc(r.code)}" value="${esc(ST.area[r.code] || '')}" placeholder="${esc((r.c.product || '').split(',')[0])}" style="min-width:150px"></td></tr>`).join('') : '<tr><td class="empty">먼저 ① 모집단을 만드세요.</td></tr>';
   $$('#bizTbl [data-mk]').forEach(b => b.onclick = () => { const code = b.dataset.mk, i = +b.dataset.i, c = ST.crits[i], r = ROWS.find(x => x.code === code); if (!c || !r) return;
     const m = ST.markOv[code] = ST.markOv[code] || {};
@@ -732,14 +768,14 @@ function renderR(){
   const lbl = (rows.find(r => r.e && r.e.label) || {}).e;
   const finLbl = [ST.fOp && '영업이익', ST.fNi && '당기순이익', ST.fEb && 'EBITDA'].filter(Boolean).join('·') + ' 시현' + (ST.fRev ? `, 매출 ${ST.fRevMin}억 이상` : '');
   $('#rTitle').textContent = ST.tName || '대상회사';
-  $('#rTbl').innerHTML = rows.length ? `<tr><th class="l nm">구분</th><th class="l">상장시장</th><th class="l">관련 사업 영역</th>${ST.crits.map((c, i) => `<th class="c">1차: ${i + 1}) ${esc(c.label || '기준')}</th>`).join('')}<th class="c">2차: ${esc(finLbl)}</th><th class="c">3차: ${m} ${ST.nMin}~${ST.nMax}</th><th>${m}</th><th class="l">제외 사유</th><th>적용 배수</th></tr>` +
+  $('#rTbl').innerHTML = rows.length ? `<tr><th class="l nm">구분</th><th class="l">상장시장</th><th class="l">관련 사업 영역</th>${ST.crits.map((c, i) => `<th class="c">1차: ${i + 1}) ${esc(critName(c))}</th>`).join('')}<th class="c">2차: ${esc(finLbl)}</th><th class="c">3차: ${m} ${ST.nMin}~${ST.nMax}</th><th>${m}</th><th class="l">제외 사유</th><th>적용 배수</th></tr>` +
     rows.sort((a, b) => (b.final - a.final) || ((b.fin === true) - (a.fin === true))).map((r, i) => `<tr class="${r.final ? 'hl' : ''}"><td class="l nm">${esc(r.name)}</td><td class="l">${r.market === '코스피' ? 'KOSPI' : 'KOSDAQ'}</td><td class="l small">${esc(ST.area[r.code] || (r.c.product || '').split(',')[0])}</td>
       ${r.crit.map(b => `<td class="c">${OX(b)}</td>`).join('')}<td class="c">${OX(r.fin)}</td><td class="c">${r.fin === true ? OX(r.nf) : ''}</td><td>${r.fin === true ? mx(r.mult) : ''}</td><td class="l">${esc(r.reason)}</td><td>${i === 0 && F.length ? mx(appliedMult()) : r.final ? '' : ''}</td></tr>`).join('') : '<tr><td class="empty">아직 1차 충족 회사가 없어요.</td></tr>';
   const pop = ROWS, kp = pop.filter(r => r.market === '코스피').length;
   const lines = [];
   lines.push(`<b>모집단</b>: ${ST.sectors.map(s => esc(secLabel(s)) + (ST.expSecs.includes(s) ? ' [최소 Peer 확보를 위해 확장]' : '')).join(', ') || '–'}${ST.adds.length ? ` + 개별 추가 ${ST.adds.length}개사` : ''} — 코스피 ${kp}개사, 코스닥 ${pop.length - kp}개사로 총 ${pop.length}개사`);
   lines.push(`<b>1차(사업유사성) 충족 회사: ${rows.length}개사</b>(아래 사업 중 1개 이상 충족)`);
-  ST.crits.forEach((c, i) => { const hit = rows.filter(r => r.crit[i]); lines.push(`&nbsp;&nbsp;${i + 1}) ${esc(c.label || '기준')}: ${hit.length}개사${hit.length && hit.length <= 8 ? `(${hit.map(r => esc(r.name)).join(', ')})` : ''}`); });
+  ST.crits.forEach((c, i) => { const hit = rows.filter(r => r.crit[i]); lines.push(`&nbsp;&nbsp;${i + 1}) ${esc(critName(c))}: ${hit.length}개사${hit.length && hit.length <= 8 ? `(${hit.map(r => esc(r.name)).join(', ')})` : ''}`); });
   const f2 = rows.filter(r => r.fin === true);
   lines.push(`<b>2차(재무유사성) 충족 회사: ${f2.length}개사</b> — ${lbl ? esc(lbl.label) + ' ' : ''}${esc(finLbl)}${f2.length && f2.length <= 12 ? `: ${f2.map(r => esc(r.name)).join(', ')}` : ''}`);
   lines.push(`<b>3차(비재무적 유사성) 충족 회사: ${F.length}개사</b>${F.length ? ` — ${F.map(r => esc(r.name)).join(', ')}` : ''}`);
@@ -791,11 +827,23 @@ function bindAll(){
   $('#bizNote').addEventListener('input', e => { ST.bizNote = e.target.value; ST.bizNoteAuto = false; save(); });
 }
 const TXT = {};
-function critHits(r){   // 각 1차 기준의 키워드가 이 회사 주요제품·매출비중·업종·사업보고서 핵심어에 있는지
+/* 1차 기준 판정
+   · 영위(any): 키워드가 주요제품·매출비중 품목·업종·사업보고서 핵심어 어디에든 있으면 O
+   · 매출비중(mix): 키워드에 맞는 매출 품목들의 비중 합계가 기준 % 이상이면 O(사업보고서 매출비중 표가 없는 회사는 X — 표에서 직접 O로 바꿀 수 있음) */
+function critEval(r){
   const key = r.code + '|' + (ST.area[r.code] || '') + '|' + (BIZ ? 1 : 0);
   const txt = TXT[key] || (TXT[key] = norm([r.c.product, r.c.sector, ksName(r.c.ksic), mixTxt(r.c), ST.area[r.code], BIZ && BIZ.docs[r.code] ? BIZ.docs[r.code].map(x => x[0]).join(' ') : ''].join(' ')));
-  return ST.crits.map(c => (c.kw || '').split(',').map(x => x.trim()).filter(Boolean).some(k => txt.includes(norm(k)) || coHas(r.code, stem(k.toLowerCase().replace(/\s/g, '')))));
+  const mix = r.c.mix || [];
+  return ST.crits.map(c => {
+    const kws = kwList(c), nk = kws.map(norm).filter(Boolean);
+    const items = mix.filter(m => { const n = norm(m.n); return nk.some(k => n.includes(k)); });
+    const pct = mix.length ? Math.round(items.reduce((s, m) => s + m.p, 0) * 10) / 10 : null;
+    const any = kws.some(k => txt.includes(norm(k)) || coHas(r.code, stem(k.toLowerCase().replace(/\s/g, ''))));
+    const hit = c.mode === 'mix' ? pct != null && pct >= (+c.min || 0) && pct > 0 : any;
+    return { hit, pct, items: items.map(m => `${m.n}(${m.p}%)`) };
+  });
 }
+const critHits = r => critEval(r).map(e => e.hit);
 function autoMark(){ return 0; }   // O/X는 이제 키워드로 실시간 계산(직접 누른 칸만 저장)
 
 /* 업종·회사 검색 */
@@ -836,21 +884,30 @@ function queryVec(){
   const tf = {}; tokens(ST.desc).forEach(t => { if (BIZ.idf[t]) tf[t] = (tf[t] || 0) + 1; });
   const w = {}; for (const [t, n] of Object.entries(tf)) w[t] = (1 + Math.log(n)) * BIZ.idf[t];
   for (const k of ST.kwPlus) for (const t of piecesOf(stem(k.toLowerCase().replace(/\s/g, '')))) if (BIZ.idf[t]) w[t] = (w[t] || 0) + BIZ.idf[t] * 2;
+  for (const [word, s] of matWords()) for (const t of piecesOf(word)) if (BIZ.idf[t]) w[t] = (w[t] || 0) + BIZ.idf[t] * s;   // 참고자료 키워드(설명보다 약하게)
   for (const [word, v] of Object.entries(ST.kwAdj)) for (const t of piecesOf(word)) if (w[t] != null) { if (v === 0) delete w[t]; else w[t] *= v; }
   const nr = Math.sqrt(Object.values(w).reduce((s, x) => s + x * x, 0)) || 1;
   for (const t in w) w[t] /= nr;
   return w;
 }
-function queryWords(){   // 화면에 보여줄 핵심 키워드(낱말 단위)
+const wIdf = h => BIZ.idf[h] ?? (h.length === 2 ? null : Math.max(0, ...piecesOf(h).slice(1).map(t => BIZ.idf[t] || 0)));
+function queryWords(){   // 화면에 보여줄 핵심 키워드(낱말 단위): 회사 설명 + 참고자료
   const cnt = {}; words(ST.desc).forEach(h => cnt[h] = (cnt[h] || 0) + 1);
-  return Object.entries(cnt).map(([h, n]) => { const id = BIZ.idf[h] ?? (h.length === 2 ? null : Math.max(0, ...piecesOf(h).slice(1).map(t => BIZ.idf[t] || 0)));
-      return id ? { w: h, s: (1 + Math.log(n)) * id } : null; })
-    .filter(Boolean).sort((a, b) => b.s - a.s).slice(0, 24);
+  const out = {};
+  for (const [h, n] of Object.entries(cnt)) { const id = wIdf(h); if (id) out[h] = { w: h, s: (1 + Math.log(n)) * id }; }
+  for (const [h, s] of matWords()) { const id = wIdf(h); if (!id) continue; const v = id * s; if (out[h]) out[h].s += v; else out[h] = { w: h, s: v, ref: true }; }
+  return Object.values(out).sort((a, b) => b.s - a.s).slice(0, 30);
+}
+/* 참고자료: 사용 중인 자료의 키워드 → [낱말, 가중치] (여러 자료에 나오면 더 강하게, 최대 1) */
+function matWords(){
+  const m = {};
+  for (const x of ST.mats || []) if (x.use) for (const [h, s] of x.kws) if (!(x.off || []).includes(h)) m[h] = Math.min(1, (m[h] || 0) + s * 0.6);
+  return Object.entries(m);
 }
 const lvKey = (k, L) => k && k.length > L ? k.slice(0, L) : k;
 function runRec(fresh){
   if (!BIZ) { REC = null; return; }
-  if (!ST.desc.trim() && !ST.kwPlus.length) { REC = null; SIM = {}; return; }
+  if (!ST.desc.trim() && !ST.kwPlus.length && !matWords().length) { REC = null; SIM = {}; return; }
   const q = queryVec(), mk = c => (c.market === '코스피' && ST.mKospi) || (c.market === '코스닥' && ST.mKosdaq);
   const sc = [];
   for (const [code, d] of Object.entries(BIZ.docs)) { const c = BY[code]; if (!c || !mk(c)) continue;
@@ -875,6 +932,18 @@ function hitWords(x){   // 회사 쪽에서 낱말이 통째로(또는 조각이
   const got = new Set(x.hit.map(h => h[0]));
   const qw = [...new Set((REC.kws || []).map(k => k.w).concat(ST.kwPlus.map(k => stem(k.toLowerCase().replace(/\s/g, '')))))];
   return qw.filter(w => ST.kwAdj[w] !== 0 && (got.has(w) || (/[가-힣]/.test(w) && w.length > 2 && piecesOf(w).slice(1).every(t => got.has(t))))).slice(0, 6); }
+/* 왜 비슷한지: 겹친 키워드가 회사의 어디에 있는지(매출 품목이면 그 비중까지) */
+function whyHtml(x){
+  const c = BY[x.code], mix = c.mix || [], prod = norm(c.product || '');
+  return hitWords(x).map(w => { const nw = norm(w), items = mix.filter(m => norm(m.n).includes(nw)), p = items.reduce((s, m) => s + m.p, 0);
+    const where = items.length ? `<span class="tag" title="${esc(items.map(m => `${m.n}(${m.p}%)`).join(', '))}">매출 ${fmt(p, 0)}%</span>` : prod.includes(nw) ? '<span class="tag">주요제품</span>' : '<span class="tag" style="opacity:.7">사업보고서</span>';
+    return `<span style="white-space:nowrap">${esc(dispW(w))} ${where}</span>`; }).join(' · ') || '<span class="mu">업종·문맥 유사</span>';
+}
+function secWhy(k){   // 이 업종에서 유사회사들이 공통으로 가진 키워드
+  const cnt = {};
+  for (const x of REC.sc.slice(0, +ST.recTop || 40)) if (lvKey(BY[x.code].ksic, +ST.recLv) === k) hitWords(x).forEach(w => cnt[w] = (cnt[w] || 0) + 1);
+  return Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([w]) => dispW(w)).join('·');
+}
 const coHas = (code, w) => { const d = BIZ && BIZ.docs[code]; if (!d) return false; const got = new Set(d.map(x => x[0])); return got.has(w) || (/[가-힣]/.test(w) && w.length > 2 && piecesOf(w).slice(1).every(t => got.has(t))); };
 /* 추천에서 체크한 업종·회사 = 모집단(체크를 바꾸면 바로 반영). withCrits: ② 1차 기준 초안도 다시 잡기 */
 let APPLY_TIMER = null, APPLY_CRITS = false;
@@ -909,7 +978,7 @@ function renderRec(){
   if (!BIZ) { box.innerHTML = '<div class="note">추천용 색인(data/biz.json)을 아직 만들지 못했어요. 다음 자동 업데이트 뒤에 쓸 수 있어요.</div>'; return; }
   if (!REC) { box.innerHTML = `<div class="note">상장사 ${BIZ.n.toLocaleString()}개 색인 준비됨 · 사업보고서 '사업의 개요' 반영 ${(BIZ.withText || 0).toLocaleString()}개사${BIZ.withText < BIZ.n * 0.8 ? ' (나머지는 업종·주요제품·매출비중 품목으로 비교, 매일 채워지는 중)' : ''}</div>`; return; }
   const secSel = new Set(ST.recSecSel || []), coSel = new Set(ST.recCoSel || []);
-  const kwH = REC.kws.map(k => { const v = ST.kwAdj[k.w]; return `<span class="chip kw ${v === 2 ? 'boost' : v === 0 ? 'off' : ''}" data-kw="${esc(k.w)}" title="누를 때마다: 보통 → ★중요(2배) → 빼기">${v === 2 ? '★ ' : ''}${esc(k.w)}</span>`; }).join('') +
+  const kwH = REC.kws.map(k => { const v = ST.kwAdj[k.w]; return `<span class="chip kw ${v === 2 ? 'boost' : v === 0 ? 'off' : ''}" data-kw="${esc(k.w)}" title="누를 때마다: 보통 → ★중요(2배) → 빼기${k.ref ? ' · 참고자료에서 나온 키워드' : ''}">${v === 2 ? '★ ' : ''}${k.ref ? '📎' : ''}${esc(dispW(k.w))}</span>`; }).join('') +
     ST.kwPlus.map((k, i) => `<span class="chip kw boost">＋ ${esc(k)}<button data-kp="${i}">×</button></span>`).join('');
   const T = REC.sc.slice(0, Math.max(+ST.recN || 20, 40));
   box.innerHTML = `<div class="recgrid">
@@ -919,14 +988,14 @@ function renderRec(){
     <div><div class="rechead"><h3>추천 업종(한국표준산업분류)</h3>
       <div style="display:flex;gap:6px;align-items:center"><span class="x">분류 단위</span><select id="recLv" style="width:auto"><option value="3">소분류(3자리)</option><option value="4">세분류(4자리)</option><option value="5">세세분류(5자리)</option></select>
       <span class="x">유사 상위</span><input type="number" id="recTop" value="${esc(ST.recTop)}" min="10" max="200" style="width:64px"><span class="x">개사 기준</span></div></div>
-      <div class="scroll" style="max-height:300px"><table><tr><th class="c">선택</th><th class="l">표준산업분류</th><th>유사 상위 ${ST.recTop}개사 중</th><th>업종 상장사 수</th><th class="l">추천 점수</th><th class="l">유사 회사 예</th></tr>
+      <div class="scroll" style="max-height:300px"><table><tr><th class="c">선택</th><th class="l">표준산업분류</th><th>유사 상위 ${ST.recTop}개사 중</th><th>업종 상장사 수</th><th class="l">추천 점수</th><th class="l">공통 사업</th><th class="l">유사 회사 예</th></tr>
       ${REC.secs.slice(0, 10).map(a => `<tr class="${secSel.has(a.k) ? 'hl' : ''}"><td class="c"><input type="checkbox" data-rs="${esc(a.k)}" ${secSel.has(a.k) ? 'checked' : ''}></td><td class="l"><b>C${esc(a.k)}</b> ${esc(ksName(a.k))}</td>
-        <td>${a.n}개사</td><td>${a.members}개사</td><td class="l"><span class="bar" style="width:${Math.max(2, a.share * 120)}px"></span>${fmt(a.share * 100, 0)}%</td><td class="l small">${esc(a.names.join(', '))}</td></tr>`).join('')}</table></div></div>
+        <td>${a.n}개사</td><td>${a.members}개사</td><td class="l"><span class="bar" style="width:${Math.max(2, a.share * 120)}px"></span>${fmt(a.share * 100, 0)}%</td><td class="l small">${esc(secWhy(a.k)) || '<span class="mu">–</span>'}</td><td class="l small">${esc(a.names.join(', '))}</td></tr>`).join('')}</table></div></div>
     <div><div class="rechead"><h3>사업이 비슷한 상장사 <span class="x">유사도: 1위 = 100</span></h3>
       <div style="display:flex;gap:6px;align-items:center"><span class="x">상위</span><input type="number" id="recN" value="${esc(ST.recN)}" min="0" max="200" style="width:64px"><span class="x">개사 선택</span></div></div>
-      <div class="scroll" style="max-height:360px"><table><tr><th class="c">선택</th><th>순위</th><th class="l nm">회사</th><th class="l">시장</th><th>유사도</th><th class="l">겹치는 키워드</th><th class="l">표준산업분류</th><th class="l">주요제품(KIND)</th></tr>
+      <div class="scroll" style="max-height:360px"><table><tr><th class="c">선택</th><th>순위</th><th class="l nm">회사</th><th class="l">시장</th><th>유사도</th><th class="l">왜 비슷한지 <span class="x">(키워드 · 어디서 나왔는지)</span></th><th class="l">표준산업분류</th><th class="l">주요제품(KIND)</th></tr>
       ${T.map((x, i) => { const c = BY[x.code]; return `<tr class="${coSel.has(x.code) ? 'hl' : ''}"><td class="c"><input type="checkbox" data-rc="${esc(x.code)}" ${coSel.has(x.code) ? 'checked' : ''}></td><td>${i + 1}</td><td class="l nm">${esc(c.name)}<div class="x">${esc(c.code)}</div></td><td class="l">${esc(c.market)}</td>
-        <td>${simCell(x.code)}</td><td class="l small">${esc(hitWords(x).join(', '))}</td><td class="l small">${c.ksic ? `C${esc(c.ksic)} ${esc(ksName(c.ksic))}` : ''}</td><td class="l wrap small">${esc(c.product || '')}</td></tr>`; }).join('')}</table></div></div>
+        <td>${simCell(x.code)}</td><td class="l small" style="min-width:220px">${whyHtml(x)}</td><td class="l small">${c.ksic ? `C${esc(c.ksic)} ${esc(ksName(c.ksic))}` : ''}</td><td class="l wrap small">${esc(c.product || '')}</td></tr>`; }).join('')}</table></div></div>
     <div class="rowbtns" id="recPrev"></div>
   </div>`;
   $('#recLv').value = String(ST.recLv);
@@ -941,13 +1010,86 @@ function renderRec(){
   $$('#recBox [data-rs]').forEach(x => x.onchange = () => { const k = x.dataset.rs; ST.recSecSel = x.checked ? [...new Set([...(ST.recSecSel || []), k])] : (ST.recSecSel || []).filter(z => z !== k); save(); x.closest('tr').classList.toggle('hl', x.checked); applyRecSoon(false); });
   $$('#recBox [data-rc]').forEach(x => x.onchange = () => { const k = x.dataset.rc; ST.recCoSel = x.checked ? [...new Set([...(ST.recCoSel || []), k])] : (ST.recCoSel || []).filter(z => z !== k); save(); x.closest('tr').classList.toggle('hl', x.checked); applyRecSoon(false); });
 }
+async function loadScript(src, glob){ if (window[glob]) return window[glob];
+  await new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error('모듈을 불러오지 못했어요')); document.head.appendChild(s); }); return window[glob]; }
+const unxml = t => { const d = document.createElement('textarea'); d.innerHTML = t; return d.value; };
+async function fileText(f, prog){
+  const n = f.name.toLowerCase();
+  if (n.endsWith('.pdf')) {
+    const lib = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'pdfjsLib');
+    lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const doc = await lib.getDocument({ data: await f.arrayBuffer() }).promise; let t = '';
+    for (let i = 1; i <= Math.min(doc.numPages, 100); i++) { const pg = await doc.getPage(i); const c = await pg.getTextContent(); t += c.items.map(x => x.str).join(' ') + '\n'; if (prog) prog(`${f.name} 읽는 중 ${i}/${doc.numPages}쪽`); }
+    return t;
+  }
+  if (n.endsWith('.pptx') || n.endsWith('.docx')) {
+    const JSZip = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip');
+    const z = await JSZip.loadAsync(await f.arrayBuffer());
+    const num = p => +((p.match(/(\d+)\.xml$/) || [])[1] || 0);
+    const list = Object.keys(z.files).filter(p => n.endsWith('.pptx') ? /^ppt\/slides\/slide\d+\.xml$/.test(p) : p === 'word/document.xml').sort((a, b) => num(a) - num(b));
+    let t = ''; for (const p of list) { const x = await z.file(p).async('string'); t += unxml((x.match(/<(?:a|w):t(?:\s[^>]*)?>[^<]*<\/(?:a|w):t>/g) || []).map(s => s.replace(/<[^>]+>/g, '')).join(' ')) + '\n'; }
+    return t;
+  }
+  if (/\.(txt|md|csv)$/.test(n)) return f.text();
+  throw new Error('PDF·PPTX·DOCX·TXT만 읽을 수 있어요(한글 hwp는 PDF로 저장해서 올려 주세요)');
+}
+
+/* ---------------- 📎 참고자료 ---------------- */
+const MAT_TEXT = {};   // 원문은 메모리에만(저장 안 함)
+function extractKws(text){   // 자료 원문 → 핵심 낱말 25개(상장사 전체에서 드문 말일수록 높게)
+  const cnt = {};
+  words(text).forEach(h => { if (h.length === 3 && /[가이]$/.test(h)) { const b = h.slice(0, 2); if (STOPW.has(b)) return; if (BIZ && BIZ.idf[b]) h = b; }
+    if ((h.length === 3 && /[가이고다며요는은게지면도]$/.test(h) && !(BIZ && BIZ.idf[h])) || (h.length === 2 && /[다며요게면]$/.test(h)) || /^(있다|했다|밝혔|늘고|있다고|말했)/.test(h)) return; cnt[h] = (cnt[h] || 0) + 1; });
+  const sc = Object.entries(cnt).map(([h, n]) => { const id = BIZ ? wIdf(h) : 1; return id && id >= 1.5 ? [h, (1 + Math.log(n)) * id] : null; }).filter(Boolean).sort((a, b) => b[1] - a[1]).slice(0, 25);
+  const mx = sc.length ? sc[0][1] : 1;
+  return sc.map(([h, s]) => [h, Math.round(s / mx * 100) / 100]);
+}
+const revSentences = t => (t.replace(/\s+/g, ' ').match(/[^.!?。\n]{8,220}(?:[.!?。]|$)/g) || []).filter(x => /매출|비중|비율|점유/.test(x) && /\d/.test(x)).slice(0, 6);
+function addMat(name, kind, text){
+  const id = newId(), kws = extractKws(text);
+  if (!kws.length) return false;
+  MAT_TEXT[id] = text;
+  ST.mats.push({ id, name: name.slice(0, 80), kind, at: new Date().toISOString().slice(0, 10), use: true, kws, off: [], chars: text.length });
+  save(); renderRef(); return true;
+}
+function renderRef(){
+  $('#n-ref').textContent = (ST.mats || []).filter(m => m.use).length;
+  $('#refList').innerHTML = (ST.mats || []).length ? ST.mats.map((m, i) => `<div class="refcard ${m.use ? '' : 'off'}">
+      <div class="refhead"><span>${m.kind === 'news' ? '📰' : '📄'}</span><b title="${esc(m.name)}">${esc(m.name)}</b><span class="x">${esc(m.at)} · ${(m.chars || 0).toLocaleString()}자 읽음${MAT_TEXT[m.id] ? '' : ' · 원문 없음(키워드만)'}</span>
+        <label class="chk" style="margin:0"><input type="checkbox" data-ru="${i}" ${m.use ? 'checked' : ''}> 추천에 반영</label><button class="btn sm" data-rd="${i}">삭제</button></div>
+      <div class="chips">${m.kws.map(([h]) => `<span class="chip kw ${(m.off || []).includes(h) ? 'off' : ''}" data-rk="${i}:${esc(h)}" title="눌러서 빼기/되살리기">${esc(dispW(h))}</span>`).join('')}</div>
+      ${MAT_TEXT[m.id] && revSentences(MAT_TEXT[m.id]).length ? `<div class="x" style="margin-top:8px">자료 속 매출 관련 문장 <span class="x">(② 매출비중 기준 잡을 때 참고 · 화면에만 보이고 저장 안 됨)</span></div><ul class="refsent">${revSentences(MAT_TEXT[m.id]).map(x => `<li>${esc(x.trim())}</li>`).join('')}</ul>` : ''}
+    </div>`).join('') : '<div class="note">아직 넣은 자료가 없어요.</div>';
+  const changed = () => { save(); renderRef(); if (REC || ST.desc) { runRec(true); renderRec(); applyRecSoon(true); } };
+  $$('#refList [data-ru]').forEach(x => x.onchange = () => { ST.mats[+x.dataset.ru].use = x.checked; changed(); });
+  $$('#refList [data-rd]').forEach(x => x.onclick = () => { const m = ST.mats.splice(+x.dataset.rd, 1)[0]; delete MAT_TEXT[m.id]; changed(); });
+  $$('#refList [data-rk]').forEach(x => x.onclick = () => { const [i, h] = [+x.dataset.rk.split(':')[0], x.dataset.rk.split(':').slice(1).join(':')], m = ST.mats[i];
+    m.off = (m.off || []).includes(h) ? m.off.filter(z => z !== h) : [...(m.off || []), h]; changed(); });
+}
+function bindRef(){
+  $('#refFile').onchange = async e => {
+    const files = [...e.target.files]; e.target.value = ''; const msg = t => $('#refMsg').textContent = t;
+    for (const f of files) {
+      try { msg(`${f.name} 읽는 중…`);
+        const t = (await fileText(f, msg)).replace(/[ \t]+/g, ' ').trim();
+        if (t.replace(/\s/g, '').length < 50) { msg(`${f.name}: 글자를 거의 못 읽었어요(그림으로 된 PDF일 수 있어요).`); continue; }
+        msg(addMat(f.name, 'file', t) ? `${f.name} → 키워드를 뽑았어요.` : `${f.name}: 쓸 만한 키워드를 못 찾았어요.`);
+      } catch (err) { msg(`${f.name}: ${err.message}`); }
+    }
+    if (REC || ST.desc) { runRec(true); renderRec(); applyRecSoon(true); }
+  };
+  $('#newsAdd').onclick = () => { const t = $('#newsText').value.trim(); if (t.length < 30) { $('#newsText').focus(); return; }
+    const ok = addMat($('#newsTitle').value.trim() || t.slice(0, 40) + '…', 'news', t);
+    if (ok) { $('#newsText').value = ''; $('#newsTitle').value = ''; if (REC || ST.desc) { runRec(true); renderRec(); applyRecSoon(true); } } };
+  renderRef();
+}
 function bindRec(){
   if (/^\[[^\]\n]+\.(pdf|pptx|docx|txt|md)\]$/im.test(ST.desc || '') || (ST.desc || '').length > 1500) {   // 예전에 올린 IR 원문은 이 기기에서도 지움
     ST.desc = ''; REC = null; SIM = {}; ST.kwAdj = {}; ST.kwPlus = []; ST.recKw = []; if (ST.bizNoteAuto) ST.bizNote = ''; save(); setTimeout(() => { $('#fileMsg').textContent = '예전에 넣었던 IR자료 원문은 지웠어요. 사업 내용을 직접 요약해서 적어 주세요.'; }, 0);
   }
   const d = $('#desc'); d.value = ST.desc || '';
   d.addEventListener('input', () => { ST.desc = d.value; save(); });
-  $('#recBtn').onclick = async () => { ST.desc = d.value; if (!ST.desc.trim() && !ST.kwPlus.length) { $('#fileMsg').textContent = '회사 사업 설명을 먼저 적어 주세요.'; return; }
+  $('#recBtn').onclick = async () => { ST.desc = d.value; if (!ST.desc.trim() && !ST.kwPlus.length && !matWords().length) { $('#fileMsg').textContent = '회사 사업 설명을 먼저 적어 주세요.'; return; }
     runRec(true); save(); renderRec(); $('#popMore').open = false; $('#recBox').scrollIntoView({ behavior: 'smooth', block: 'start' }); await applyRec(true); };
   $('#descClear').onclick = () => { d.value = ST.desc = ''; ST.kwAdj = {}; ST.kwPlus = []; REC = null; SIM = {}; ST.recSecSel = ST.recCoSel = null; save(); renderRec(); refreshLight(); };
   ['mKospi', 'mKosdaq'].forEach(k => $('#' + k).addEventListener('change', () => { if (REC) { runRec(false); renderRec(); } }));
@@ -1068,14 +1210,14 @@ async function buildExcel(){
   R.columns = [{ width: 2 }, { width: 18 }, { width: 10 }, { width: 22 }, ...ST.crits.map(() => ({ width: 14 })), { width: 16 }, { width: 16 }, { width: 10 }, { width: 24 }, { width: 11 }];
   title(R, '1. 유사기업 최종 선정', `1차(사업유사성) 충족 ${biz.length}개사 중 최종 Peer 선정 · ${sub}`);
   const finLbl = [ST.fOp && '영업이익', ST.fNi && '당기순이익', ST.fEb && 'EBITDA'].filter(Boolean).join(', ') + ' 시현';
-  head(R, 5, 2, ['구분', '상장시장', '관련 사업 영역', ...ST.crits.map((c, i) => `1차: ${i + 1}) ${c.label || '기준'}`), `2차: ${finLbl}`, `3차: ${m} ${ST.nMin}~${ST.nMax}`, m, '제외 사유', '적용 배수']);
+  head(R, 5, 2, ['구분', '상장시장', '관련 사업 영역', ...ST.crits.map((c, i) => `1차: ${i + 1}) ${critName(c)}`), `2차: ${finLbl}`, `3차: ${m} ${ST.nMin}~${ST.nMax}`, m, '제외 사유', '적용 배수']);
   R.getRow(5).height = 32;
   const order = [...biz].sort((a, b) => (b.final - a.final) || ((b.fin === true) - (a.fin === true)));
-  order.forEach((r, i) => put(R, 6 + i, 2, [r.name, r.market === '코스피' ? 'KOSPI' : 'KOSDAQ', ST.area[r.code] || (r.c.product || '').split(',')[0], ...r.crit.map(b => b ? 'O' : 'X'),
+  order.forEach((r, i) => put(R, 6 + i, 2, [r.name, r.market === '코스피' ? 'KOSPI' : 'KOSDAQ', ST.area[r.code] || (r.c.product || '').split(',')[0], ...r.crit.map((b, i) => (b ? 'O' : 'X') + ((ST.crits[i] || {}).mode === 'mix' && r.critPct[i] != null ? ` (${r.critPct[i]}%)` : '')),
     r.fin === true ? 'O' : r.fin === false ? 'X' : '–', r.fin === true ? (r.nf === true ? 'O' : r.nf === false ? 'X' : '–') : null, r.fin === true ? r.mult : null, r.reason, i === 0 && F.length ? appliedMult() : (r.final ? null : null)],
     { boldFirst: true, fmt: [null, null, null, ...ST.crits.map(() => null), null, null, '0.00', null, '0.00'], fill: r.final ? HL : null }));
   let y = 7 + order.length;
-  const sumLines = [`1차(사업유사성) 충족 회사: ${biz.length}개사(아래 사업 중 1개 이상 충족)`, ...ST.crits.map((c, i) => { const h = biz.filter(r => r.crit[i]); return `${i + 1}) ${c.label || '기준'}: ${h.length}개사${h.length <= 8 ? `(${h.map(r => r.name).join(', ')})` : ''}`; }), '',
+  const sumLines = [`1차(사업유사성) 충족 회사: ${biz.length}개사(아래 사업 중 1개 이상 충족)`, ...ST.crits.map((c, i) => { const h = biz.filter(r => r.crit[i]); return `${i + 1}) ${critName(c)}: ${h.length}개사${h.length <= 8 ? `(${h.map(r => r.name).join(', ')})` : ''}`; }), '',
     `2차(재무유사성) 충족 회사: ${biz.filter(r => r.fin === true).length}개사`, `${finLbl}: ${biz.filter(r => r.fin === true).map(r => r.name).join(', ')}`, '',
     `3차(비재무적 유사성) 충족 회사: ${F.length}개사`, F.map(r => r.name).join(', ')];
   sumLines.forEach((t, i) => { R.getCell(y + i, 2).value = t; R.getCell(y + i, 2).font = { name: FONT, size: 10, bold: /충족 회사/.test(t) }; });
@@ -1107,7 +1249,7 @@ async function buildExcel(){
   const nfL = [ST.nAdmin && '평가기준일 현재 관리종목 또는 투자위험 종목으로 지정되지 않았을 것', ST.nList && `평가기준일 현재 상장후 ${ST.nListM}개월 이상 경과하였을 것`, ST.nAudit && '최근 사업연도 감사의견이 적정일 것',
     ST.nMult && `비경상적 ${m} Multiple 기업 제외(${ST.nMin}x 이상, ${ST.nMax}x 이하만 사용)`, ST.nFye && '결산월이 12월일 것'].filter(Boolean).map((t, i) => `${i + 1}) ${t}`).join('\n');
   const prow = [['모집단 선정', '업종 유사성', `${ST.recAt ? `대상회사 사업 설명(핵심어: ${(ST.recKw || []).slice(0, 8).join(', ')})과 전 상장사의 업종·주요제품·사업보고서 사업의 개요를 비교한 사업 유사도로 추천된\n` : ''}한국표준산업분류 다음 분류에 속하는 기업 중 유가증권시장 및 코스닥시장 상장회사\n${ST.sectors.map(s => `- ${secLabel(s)}${ST.expSecs.includes(s) ? ` (최소 Peer 확보를 위해 사업 범위 확장으로 추가: ${ST.expInfo[s] || ''})` : ''}`).join('\n')}${ST.adds.length ? `\n- 업종 외 사업 유사 회사 개별 추가: ${ST.adds.map(a => (BY[a] || {}).name || a).join(', ')}` : ''}`, `코스피 ${kp}개사, 코스닥 ${ROWS.length - kp}개사로 총 ${ROWS.length}개사`],
-    ['1차', '사업 유사성', `다음 기준 중 한 가지 이상을 충족하는 회사\n${ST.crits.map((c, i) => `${i + 1}) ${c.label || '기준'}`).join('\n')}`, biz.map(r => r.name).join(', ')],
+    ['1차', '사업 유사성', `다음 기준 중 한 가지 이상을 충족하는 회사\n${ST.crits.map((c, i) => `${i + 1}) ${critName(c)}`).join('\n')}`, biz.map(r => r.name).join(', ')],
     ['2차', '재무 유사성', `${per}(최근 12개월) 간 ${finLbl.replace(' 시현', '')}을 시현하였을 것${ST.fRev ? `, 매출액 ${ST.fRevMin}억원 이상` : ''}`, biz.filter(r => r.fin === true).map(r => r.name).join(', ')],
     ['3차', '비재무적 유사성', nfL, `${F.map(r => r.name).join(', ')} ${F.length}개사 최종 선정`]];
   prow.forEach((v, i) => { put(P, 6 + i, 2, v, { boldFirst: true }); P.getRow(6 + i).eachCell(c => c.alignment = { wrapText: true, vertical: 'top' }); P.getRow(6 + i).height = Math.max(30, 15 * (String(v[2]).split('\n').length + 1)); });
@@ -1115,7 +1257,7 @@ async function buildExcel(){
   P.getCell(py, 2).value = '2. 유사기업 선정 과정'; P.getCell(py, 2).font = { name: FONT, size: 14, bold: true, color: { argb: NAVY } }; py += 2;
   P.getCell(py, 2).value = '1) 사업 유사성'; P.getCell(py, 2).font = { name: FONT, bold: true }; py++;
   (ST.bizNote || '').split('\n').forEach(t => { P.getCell(py, 2).value = t; py++; });
-  ST.crits.forEach((c, i) => { const h = biz.filter(r => r.crit[i]); P.getCell(py, 2).value = `${i + 1}) ${c.label || '기준'}: ${h.map(r => r.name).join(', ')} ${h.length}개사`; py++; });
+  ST.crits.forEach((c, i) => { const h = biz.filter(r => r.crit[i]); P.getCell(py, 2).value = `${i + 1}) ${critName(c)}: ${h.map(r => r.name).join(', ')} ${h.length}개사`; py++; });
   P.getCell(py, 2).value = `총 ${biz.length}개사 충족`; py += 2;
   P.getCell(py, 2).value = '2) 재무 유사성'; P.getCell(py, 2).font = { name: FONT, bold: true }; py++;
   P.getCell(py, 2).value = `${per}(최근 12개월) 간 ${finLbl}`; py++;
@@ -1130,7 +1272,7 @@ async function buildExcel(){
   title(W, `Peer Analysis · ${per} 실적(12개월)`, sub);
   const wc = [['Code', r => 'A' + r.code, 9], ['Name', r => r.name, 16], ['시장', r => r.market, 7], ['결산월', r => r.c.fye, 7], ['감사의견', r => r.c.audit, 8], ['상장일', r => r.c.listed, 11], ['업종', r => r.c.sector, 22],
     ['상장주식수', r => r.shares, 13, '#,##0'], ['매출액(TTM)', r => mil(r.rev), 12, '#,##0'], ['영업이익(TTM)', r => mil(r.op), 12, '#,##0;[Red]-#,##0'], ['당기순이익(지배, TTM)', r => mil(r.ni), 13, '#,##0;[Red]-#,##0'], ['EBITDA(TTM)', r => mil(r.ebitda), 12, '#,##0;[Red]-#,##0'],
-    ['주요제품(KIND)', r => r.c.product, 26], ['매출비중', r => mixTxt(r.c), 34], ['사업유사성', r => r.biz ? 'O' : 'X', 9], ...ST.crits.map((c, i) => [`${i + 1}) ${c.label || '기준'}`, r => r.crit[i] ? 'O' : 'X', 12]),
+    ['주요제품(KIND)', r => r.c.product, 26], ['매출비중', r => mixTxt(r.c), 34], ['사업유사성', r => r.biz ? 'O' : 'X', 9], ...ST.crits.map((c, i) => [`${i + 1}) ${critName(c)}`, r => r.crit[i] ? 'O' : 'X', 12]),
     ['재무유사성', r => r.fin === true ? 'O' : r.fin === false ? 'X' : '–', 9], ['기준주가(원)', r => r.price ? Math.round(r.price) : null, 11, '#,##0'], ['기준시총(백만원)', r => mil(r.mcap), 13, '#,##0'],
     ['PER', r => r.per, 9, '0.00'], ['PSR', r => r.psr, 9, '0.00'], ['EV/EBITDA', r => r.evx, 9, '0.00'], ['PBR', r => r.pbr, 9, '0.00'], ['3차', r => r.fin === true ? (r.nf === true ? 'O' : r.nf === false ? 'X' : '–') : null, 7], ['최종유사기업', r => r.final ? 'O' : null, 10], ['사업영역', r => ST.area[r.code] || null, 18]];
   W.columns = [{ width: 2 }, ...wc.map(c => ({ width: c[2] }))];
@@ -1185,7 +1327,7 @@ async function buildExcel(){
   try { DISC = (await getJSON('data/ipo_disc.json')).items || []; } catch (e) { DISC = []; }
   try { [BIZ, KS] = await Promise.all([getJSON('data/biz.json'), getJSON('data/ksic.json')]); } catch (e) { BIZ = BIZ || null; }
   if (BIZ && ST.desc && ST.recAt) runRec(false);
-  bindAll(); bindRec(); showStep(ST.step || 'pop'); await refresh();
+  bindAll(); bindRec(); bindRef(); showStep(ST.step || 'pop'); await refresh();
 })();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});   // 앱 설치용
 </script>
